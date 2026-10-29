@@ -30,7 +30,7 @@ standings, AI-style win probabilities, news, driver telemetry comparisons and a
 
 ```bash
 cd backend
-npm install
+npm install          # also runs `prisma generate` via postinstall
 
 # 1a. Start PostgreSQL with Docker (or use an existing server)
 docker compose up -d
@@ -42,8 +42,7 @@ psql -U postgres -c "CREATE DATABASE apex_telemetry OWNER apex;"
 # 2. Configure environment
 cp .env.example .env
 
-# 3. Generate client, migrate, seed
-npm run prisma:generate
+# 3. Migrate and seed
 npm run prisma:migrate      # or: npm run prisma:push
 npm run seed
 
