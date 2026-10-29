@@ -1,0 +1,136 @@
+// ApexTelemetry — Prisma schema
+// PostgreSQL. Run `npm run prisma:generate`, then `npm run prisma:migrate` (or `prisma:push`).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Series {
+  F1
+  F2
+  MOTOGP
+}
+
+enum SessionType {
+  PRACTICE
+  QUALIFYING
+  SPRINT
+  RACE
+}
+
+model Driver {
+  id           String      @id @default(cuid())
+  driverNumber Int
+  code         String      @unique
+  fullName     String
+  teamName     String
+  series       Series
+  points       Float       @default(0)
+  wins         Int         @default(0)
+  podiums      Int         @default(0)
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  telemetry Telemetry[]
+
+  @@index([series, points(sort: Desc)])
+  @@map("drivers")
+}
+
+model Constructor {
+  id       String   @id @default(cuid())
+  name     String   @unique
+  series   Series
+  points   Float    @default(0)
+  colorHex String   @default("#FFFFFF")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([series, points(sort: Desc)])
+  @@map("constructors")
+}
+
+model Circuit {
+  id        String   @id @default(cuid())
+  name      String
+  country   String
+  latitude  Float
+  longitude Float
+  lengthKm  Float
+  createdAt DateTime @default(now())
+
+  sessions Session[]
+
+  @@unique([name, country])
+  @@map("circuits")
+}
+
+model Session {
+  id          String      @id @default(cuid())
+  series      Series
+  sessionType SessionType
+  circuitId   String
+  startTime   DateTime
+  isActive    Boolean     @default(false)
+  createdAt   DateTime    @default(now())
+
+  circuit    Circuit      @relation(fields: [circuitId], references: [id], onDelete: Restrict)
+  telemetry  Telemetry[]
+  weather    WeatherLog[]
+
+  @@index([series, startTime(sort: Desc)])
+  @@index([isActive])
+  @@map("sessions")
+}
+
+model Telemetry {
+  id        Int      @id @default(autoincrement())
+  sessionId String
+  driverId  String
+  speed     Float
+  rpm       Int
+  gear      Int
+  throttle  Float
+  brake     Float
+  drs       Boolean  @default(false)
+  timestamp DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  driver  Driver  @relation(fields: [driverId], references: [id], onDelete: Cascade)
+
+  // Hot path: last-N-seconds replay per driver inside a session.
+  @@index([sessionId, driverId, timestamp])
+  @@map("telemetry")
+}
+
+model WeatherLog {
+  id              Int      @id @default(autoincrement())
+  sessionId       String
+  trackTemp       Float
+  airTemp         Float
+  rainProbability Float
+  recordedAt      DateTime @default(now())
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, recordedAt(sort: Desc)])
+  @@map("weather_logs")
+}
+
+model NewsItem {
+  id          String   @id @default(cuid())
+  title       String
+  summary     String
+  series      Series
+  sourceUrl   String
+  imageUrl    String?
+  publishedAt DateTime @default(now())
+
+  @@index([series, publishedAt(sort: Desc)])
+  @@map("news_items")
+}

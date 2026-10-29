@@ -1,0 +1,14 @@
+{
+  "name": "apex-telemetry-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ApexTelemetry dashboard — static UI with a live adapter for the backend REST API and 2 Hz WebSocket feed.",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}

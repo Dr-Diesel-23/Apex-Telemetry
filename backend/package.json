@@ -1,0 +1,64 @@
+{
+  "name": "apex-telemetry-backend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "ApexTelemetry backend — live motorsport telemetry, standings and race intelligence for F1, F2 and MotoGP.",
+  "main": "dist/src/server.js",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "dev": "ts-node src/server.ts",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/src/server.js",
+    "postinstall": "prisma generate",
+    "prisma:generate": "prisma generate",
+    "prisma:push": "prisma db push",
+    "prisma:migrate": "prisma migrate dev --name init",
+    "prisma:studio": "prisma studio",
+    "seed": "ts-node prisma/seed.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.test.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:api": "vitest run tests/api.test.ts",
+    "test:ws": "vitest run tests/websocket.test.ts"
+  },
+  "keywords": [
+    "f1",
+    "f2",
+    "motogp",
+    "telemetry",
+    "express",
+    "prisma",
+    "websocket"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "axios": "^1.21.0",
+    "cors": "^2.8.6",
+    "dotenv": "^18.0.9",
+    "express": "^5.3.0",
+    "ioredis": "^6.0.0",
+    "p-queue": "^10.0.0",
+    "ws": "^8.22.0",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@types/cors": "^2.8.19",
+    "@types/express": "^5.0.6",
+    "@types/node": "^26.6.5",
+    "@types/supertest": "^7.2.1",
+    "@types/ws": "^8.18.2",
+    "prisma": "^6.19.3",
+    "supertest": "^7.3.1",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  },
+  "allowScripts": {
+    "@prisma/client@6.19.3": true,
+    "@prisma/engines@6.19.3": true,
+    "prisma@6.19.3": true
+  }
+}
