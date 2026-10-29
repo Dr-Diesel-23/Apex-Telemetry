@@ -72,19 +72,16 @@ button:hover,.active{background:#121212}
 .next-flag{width:26px;height:18px;object-fit:cover;border:1px solid #2a2a2a;flex:0 0 auto}
 
 /* --- real signature-corner photographs ---------------------------------- */
-.event-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.34;filter:saturate(.85) contrast(1.05);z-index:0}
-.event::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#000 0%,rgba(0,0,0,.87) 42%,rgba(0,0,0,.5) 100%);z-index:0}
+.event-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:1;filter:saturate(1.06) brightness(1.06);z-index:0}
+.event::after{content:none}
+.event>div{text-shadow:0 1px 2px #000,0 2px 7px rgba(0,0,0,.95),0 0 26px rgba(0,0,0,.85)}
+.event .photo-credit{color:#c9d2d9;text-shadow:0 1px 3px #000,0 0 10px #000}
 .event>div{position:relative;z-index:1}
 .circuit-panel.has-photo .corner-art{display:none}
 .photo-credit{display:block;margin-top:10px;color:#5f6a74;font:8px monospace;letter-spacing:.6px;text-transform:uppercase;position:relative;z-index:1}
 .circuit-panel .photo-credit{margin-top:6px}
 
-.event-photo{opacity:.6;filter:saturate(1.05) brightness(1.12) contrast(1.02)}
-.event::after{background:linear-gradient(90deg,rgba(0,0,0,.93) 0%,rgba(0,0,0,.6) 44%,rgba(0,0,0,.18) 100%)}
-
-/* --- brighter session photo + wider driver-id badges -------------------- */
-.event-photo{opacity:.7;filter:saturate(1.06) brightness(1.18) contrast(1.02)}
-.event::after{background:linear-gradient(90deg,rgba(0,0,0,.9) 0%,rgba(0,0,0,.52) 42%,rgba(0,0,0,.1) 100%)}
+/* Wider driver-id badges */
 .driver{grid-template-columns:64px 1fr 40px}
 .initial{text-align:center;white-space:nowrap}
 

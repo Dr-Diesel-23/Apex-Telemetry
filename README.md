@@ -71,8 +71,9 @@ the age of the current set and the last pit-lane time.
 
 The circuit profile panel shows the SVG track map and the track facts — no
 photograph. The "up next" session card still uses a real photograph of the
-circuit's signature corner as a bright background (`opacity: .7`,
-`brightness(1.18)`), so the image stays readable behind the panel text.
+circuit's signature corner as a full-bleed background at **full brightness**
+(`opacity: 1`, no overlay or blur); the panel copy uses a text shadow so it stays
+readable over the image.
 
 Both assets are generated, not hand-edited:
 
