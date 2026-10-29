@@ -163,7 +163,8 @@ describe('standings', () => {
     const res = await api.get('/api/v1/f1/standings/constructors').expect(200);
 
     expect(res.body.standings).toHaveLength(4);
-    expect(res.body.standings[0].name).toBe('McLaren');
+    // Official 2026 entrant names, not the timing-feed short names.
+    expect(res.body.standings[0].name).toBe('McLaren Mastercard F1 Team');
     expect(res.body.standings[0].colorHex).toMatch(/^#[0-9A-F]{6}$/i);
   });
 

@@ -135,12 +135,34 @@ Base URL: `/api/v1`
 | `GET` | `/:series/standings/constructors` | Constructor/team standings |
 | `GET` | `/:series/telemetry/compare?driver1=VER&driver2=NOR&limit=120` | Speed/gear/throttle comparison |
 | `GET` | `/:series/tyres` | Tyre strategy: stints, compounds, laps per set, pit stops (F1) |
-| `GET` | `/:series/schedule` | Season calendar with the next and last race (Jolpica / Pulse Live) |
+| `GET` | `/:series/schedule` | Season calendar with the next and last race (Jolpica / Pulse Live), each race carrying `countryCode` |
 | `GET` | `/health` and `/api/v1/health` | Liveness + DB/WS status |
 
 `:series` accepts `f1`, `f2`, `motogp` (case-insensitive; `formula-1`, `moto-gp`
 also work). Invalid series return `400`. The dashboard exposes **F1 and MotoGP**;
 the `f2` routes remain on the API for compatibility.
+
+### Teams, names and flags
+
+- **Official entrant names.** F1 team names are mapped from the timing-feed short
+  names to the official 2026 entry list (`src/config/teamNames.ts`), so
+  standings, tyres, the live feed and the WebSocket return
+  `McLaren Mastercard F1 Team`, `Scuderia Ferrari HP`,
+  `Mercedes-AMG PETRONAS Formula One Team`, `Oracle Red Bull Racing`,
+  `Audi Revolut F1 Team`, `Cadillac Formula 1 Team`, … instead of `McLaren`,
+  `Ferrari`, `Mercedes`. `shortTeamName()` provides the compact form for tight
+  rows; team colours resolve through both spellings.
+- **Driver identity.** Driver standings carry `code` and `driverNumber`, which the
+  dashboard renders as the official timing identity: `(HAM-44)`, `(LEC-16)`,
+  `(VER-3)`.
+- **Constructors.** `/:series/standings/constructors` returns `name`, `points`,
+  `gapToLeader`, `position` and `colorHex`. F1 uses the official entrant name;
+  MotoGP team points are summed from the riders of each team.
+- **Country flags.** Every `RaceSummary` in `/:series/schedule` (`next`, `last`
+  and `races[]`) includes `countryCode` — the ISO 3166-1 alpha-2 code used by the
+  dashboard to render `https://flagcdn.com/w40/{code}.png`. Jolpica only returns
+  country names, so they are mapped in `src/config/countries.ts`; Pulse Live
+  already supplies ISO-2 codes.
 
 ### Live data sources
 
@@ -151,6 +173,10 @@ the `f2` routes remain on the API for compatibility.
 | F1 calendar | Jolpica `/current/races.json` (6 h cache) | - | - |
 | MotoGP | Pulse Live `/results/standings`, `/results/events` (10 min cache) | deterministic simulator | Open-Meteo |
 | any (fallback) | PostgreSQL + simulator | deterministic simulator | Open-Meteo |
+
+OpenF1 and Pulse Live names are normalised before they reach the API: F1 teams
+become their official 2026 entrant names and every race gets an ISO-2
+`countryCode` for the dashboard flag.
 
 How the F1 path behaves:
 
@@ -211,7 +237,7 @@ curl "http://localhost:4000/api/v1/overview/live"
       "position": 1,
       "code": "NOR",
       "fullName": "Lando Norris",
-      "teamName": "McLaren",
+      "teamName": "McLaren Mastercard F1 Team",
       "teamColor": "#FF8000",
       "speed": 310.7,
       "rpm": 12900,
@@ -298,7 +324,7 @@ Snapshot:
       "code": "VER",
       "driverNumber": 1,
       "fullName": "Max Verstappen",
-      "teamName": "Red Bull Racing",
+      "teamName": "Oracle Red Bull Racing",
       "teamColor": "#3671C6",
       "speed": 267.4,
       "rpm": 11230,
@@ -458,7 +484,7 @@ backend/
 ├─ src/
 │  ├─ app.ts                 # Express wiring, CORS, health
 │  ├─ server.ts              # HTTP + WS bootstrap, graceful shutdown
-│  ├─ config/                # env (zod), prisma, series, reference data, colours
+│  ├─ config/                # env (zod), prisma, series, reference data, team names, colours
 │  ├─ controllers/           # thin HTTP handlers
 │  ├─ middleware/            # error handler, request logger, query validation
 │  ├─ routes/                # /overview, /:series/standings, /:series/telemetry

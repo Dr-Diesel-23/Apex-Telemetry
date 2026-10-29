@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { env } from '../config/env';
+import { countryCode } from '../config/countries';
 import { logger } from '../utils/logger';
 import type { RaceSummary, ScheduleResult } from './calendar.types';
 
@@ -70,6 +71,7 @@ function mapRace(row: ErgastRace): RaceSummary {
     circuit: row.Circuit.circuitName,
     locality: row.Circuit.Location.locality,
     country: row.Circuit.Location.country,
+    countryCode: countryCode(row.Circuit.Location.country),
     startsAt,
     date: row.date,
     status: statusFor(startsAt, row.date),

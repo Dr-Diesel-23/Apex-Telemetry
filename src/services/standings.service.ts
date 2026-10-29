@@ -5,6 +5,7 @@ import { getOpenF1SeasonStats, getOpenF1TeamStandings, type OpenF1Driver } from 
 import { getOpenF1Championship, getOpenF1Drivers } from './liveSession.service';
 import { getMotoGPStandings } from './motogp.service';
 import { teamColor } from '../config/teamColors';
+import { fullTeamName, shortTeamName } from '../config/teamNames';
 import { round } from '../utils/random';
 
 export interface DriverStanding {
@@ -128,7 +129,10 @@ async function loadOpenF1ConstructorStandings(
       name: team.teamName,
       series,
       points: round(team.points, 1),
-      colorHex: dbByName.get(team.teamName.toLowerCase())?.colorHex ?? teamColor(team.teamName),
+      colorHex:
+        dbByName.get(team.teamName.toLowerCase())?.colorHex ??
+        dbByName.get(shortTeamName(team.teamName).toLowerCase())?.colorHex ??
+        teamColor(team.teamName),
     })),
   );
 
@@ -230,7 +234,7 @@ export async function getDriverStandings(series: Series): Promise<StandingsResul
       code: driver.code,
       driverNumber: driver.driverNumber,
       fullName: driver.fullName,
-      teamName: driver.teamName,
+      teamName: series === Series.F1 ? fullTeamName(driver.teamName) : driver.teamName,
       series: driver.series,
       points: round(driver.points, 1),
       wins: driver.wins,
@@ -276,7 +280,7 @@ export async function getConstructorStandings(series: Series): Promise<Standings
   const standings = buildConstructorStandings(
     data.map((constructor) => ({
       constructorId: constructor.id,
-      name: constructor.name,
+      name: series === Series.F1 ? fullTeamName(constructor.name) : constructor.name,
       series: constructor.series,
       points: round(constructor.points, 1),
       colorHex: constructor.colorHex,

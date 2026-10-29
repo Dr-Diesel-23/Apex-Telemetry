@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { env } from '../config/env';
+import { fullTeamName } from '../config/teamNames';
 import { logger } from '../utils/logger';
 import type { WeatherSnapshot } from './weather.service';
 
@@ -515,7 +516,7 @@ async function loadContext(): Promise<OpenF1Context | null> {
     fullName: driver.full_name,
     firstName: driver.first_name,
     lastName: driver.last_name,
-    teamName: driver.team_name,
+    teamName: fullTeamName(driver.team_name),
     teamColour: driver.team_colour ? `#${driver.team_colour.replace('#', '')}` : '#8C99A5',
   }));
 
@@ -550,7 +551,7 @@ async function loadContext(): Promise<OpenF1Context | null> {
           teams.value.map((row) => [
             row.team_name,
             {
-              teamName: row.team_name,
+              teamName: fullTeamName(row.team_name),
               position: row.position_current,
               points: row.points_current,
             },

@@ -13,6 +13,8 @@ export interface RaceSummary {
   circuit: string;
   locality: string;
   country: string;
+  /** ISO 3166-1 alpha-2 country code, used for the flag (`MX`). */
+  countryCode: string | null;
   /** Scheduled start in ISO 8601 UTC, or `null` when only a date is known. */
   startsAt: string | null;
   /** Calendar date (`YYYY-MM-DD`). */

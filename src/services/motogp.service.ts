@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { env } from '../config/env';
+import { countryCode } from '../config/countries';
 import { logger } from '../utils/logger';
 import type { RaceSummary, ScheduleResult } from './calendar.types';
 
@@ -161,6 +162,7 @@ function mapRaces(events: PulseEvent[]): RaceSummary[] {
         circuit: event.circuit.name,
         locality: event.circuit.place,
         country: event.country.name,
+        countryCode: countryCode(event.country.iso),
         startsAt: null,
         date: event.date_start,
         status,
