@@ -15,17 +15,31 @@ Start the backend first (`../backend`, `npm start`, port 4000).
 | Panel | Source |
 | --- | --- |
 | Live telemetry strip (2 Hz) | `ws://localhost:4000/ws/telemetry?series=f1` — real OpenF1 car data, **only while a session is running** |
-| Championship standings | `GET /api/v1/:series/standings/drivers` — OpenF1 for F1, Pulse Live for MotoGP |
+| Championship standings | `GET /api/v1/:series/standings/drivers` / `.../constructors` — OpenF1 for F1, Pulse Live for MotoGP |
 | Session card (circuit, length, session type, mode) | `GET /api/v1/overview/live?series=f1` |
 | Weather (track / air / rain) | same overview payload — OpenF1 track weather for F1, Open-Meteo otherwise |
 | AI win probability | `GET /api/v1/overview/predictions?series=f1` |
 | Tyre strategy | `GET /api/v1/f1/tyres` — OpenF1 stints + pit stops |
 | Next race + countdown | `GET /api/v1/:series/schedule` — Jolpica (F1) / Pulse Live (MotoGP) |
-| Circuit layout + corner art | `circuits.js` (local SVG data) |
+| Next-race country flag | `flagcdn.com` (`w40/{iso2}.png`), code from the schedule payload |
+| Circuit photo + layout | `corners.js` (real corner photo) + `circuits.js` (SVG map) |
 | Race control feed | sample data (no public live race-control API) |
 
 F1 and MotoGP are the supported series. The standings tabs, the series filter and
 the WebSocket follow the selected series; the overview always shows the F1 desk.
+
+## Championship standings
+
+The panel has two independent switches:
+
+- **F1 / MotoGP** — which championship.
+- **DRIVERS / CONSTRUCTORS** — which table.
+
+Drivers are labelled with their official timing identity and number, e.g.
+`Lewis Hamilton (HAM-44)`, and their full 2026 entrant name
+(`Scuderia Ferrari HP`, `Audi Revolut F1 Team`, `McLaren Mastercard F1 Team`, …).
+The constructors table shows rank, team, points and gap to the leader, with each
+team's colour stripe.
 
 ## Live telemetry only when the race is live
 
@@ -52,24 +66,38 @@ pit-lane time. The panel renders Pirelli-style sidewall pills:
 A row reads like `M 24 › H 32 — 32 LAPS ON H — 1 STOP · 23.5S`: the stint chain,
 the age of the current set and the last pit-lane time.
 
-## Circuit layouts
+## Circuit profile: photograph + layout
 
-`circuits.js` holds a normalised SVG path (100x100 viewBox) for all 23 circuits
-of the 2026 F1 calendar, plus a zoomed trace of each circuit's tightest corner.
-The corner trace is painted faintly behind the "up next" card and the circuit
-profile panel, replacing the old stock car photo.
+The circuit panel is stacked photo-first: a real photograph of the circuit's
+signature corner on top, the SVG track map below it, then the track facts. The
+"up next" session card uses the same photograph as a bright background
+(`opacity: .7`, `brightness(1.18)`), so the image stays readable behind the
+panel text.
 
-The file is generated, not hand-edited:
+Both assets are generated, not hand-edited:
 
 ```bash
-node tools/build-circuits.mjs
+node tools/build-circuits.mjs   # layouts  → circuits.js
+node tools/build-corners.mjs    # photos   → corners.js
 ```
 
-Geometry comes from [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits)
-(MIT), which is derived from OpenStreetMap contributors (ODbL). Circuits are
-resolved from the names the API returns (`shortName`, `name`, id) via
-`window.apexCircuitFor(...)`, so the layout follows the selected session. A
-circuit without a layout shows `LAYOUT N/A` rather than a wrong map.
+- **Layouts** (`circuits.js`) — a normalised SVG path (100x100 viewBox) for all
+  23 circuits of the 2026 F1 calendar, plus a zoomed trace of each circuit's
+  tightest corner. Geometry comes from
+  [bacinger/f1-circuits](https://github.com/bacinger/f1-circuits) (MIT), derived
+  from OpenStreetMap contributors (ODbL). A circuit without a layout shows
+  `LAYOUT N/A` rather than a wrong map.
+- **Photos** (`corners.js`) — one real, CC-licensed photograph per circuit from
+  Wikimedia Commons / Wikipedia. The builder searches Commons for the corner,
+  then the circuit's own Commons category, then the Wikipedia lead image, and
+  rejects maps, logos and non-JPEG artwork. `madring` has no free photograph and
+  deliberately falls back to the SVG corner trace.
+
+Every photo carries `title`, `credit` and `license`, rendered under the image as
+`PHOTO — TURN 1 · CC BY-SA 4.0 · HoverVan`. Circuits are resolved from the names
+the API returns (`shortName`, `name`, id) via `window.apexCircuitFor(...)` and
+`window.apexCornerFor(...)`, so both the photo and the map follow the selected
+session.
 
 ## Behaviour
 
@@ -94,9 +122,11 @@ Frontend/
 ├── app.js              # render layer: pages, panels, tables, tyre rows
 ├── live.js             # API/WS adapter: standings, telemetry, tyres, schedule
 ├── circuits.js         # generated circuit layouts + corner traces
-├── styles.css          # dark telemetry theme
+├── corners.js          # generated signature-corner photos + attribution
+├── styles.css          # deep-black telemetry theme
 ├── tools/
-│   └── build-circuits.mjs
+│   ├── build-circuits.mjs   # OSM layouts → circuits.js
+│   └── build-corners.mjs    # Commons/Wikipedia photos → corners.js
 └── server.js           # static file server (port 5173, /health)
 ```
 

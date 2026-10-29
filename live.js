@@ -89,6 +89,9 @@
           ? frame.teamColor
           : '#ff3e32';
         const name = String(frame.fullName || frame.code || '').toUpperCase();
+        const driverId = frame.code
+          ? `(${frame.code}${frame.driverNumber != null ? `-${frame.driverNumber}` : ''})`
+          : '';
         const tyre =
           frame.tyre && frame.tyre.compound
             ? `<span class="tyre-pill ${String(frame.tyre.compound).toLowerCase()}" title="${frame.tyre.compoundLabel || ''} · ${frame.tyre.laps || 0} laps">${frame.tyre.compound}</span>`
@@ -97,7 +100,7 @@
           '<div class="live-row">' +
           `<span class="initial">${frame.code}</span>` +
           '<div class="live-name">' +
-          `<span>${name}</span>` +
+          `<span>${name}${driverId ? ` <em class="driver-id">${driverId}</em>` : ''}</span>` +
           `<div class="bar"><i style="width:${throttle}%;background:${color}"></i></div>` +
           '</div>' +
           `<b>${Math.round(frame.speed)}<small>KPH</small></b>` +
@@ -136,6 +139,8 @@
         driver.wins,
         driver.podiums,
         driver.gapToLeader === 0 ? 'LEADER' : `+${driver.gapToLeader}`,
+        driver.code,
+        driver.driverNumber,
       ]);
       loaded += 1;
     });
@@ -150,6 +155,43 @@
     state.error = null;
     if (typeof window.apexRender === 'function') window.apexRender();
     renderStrip();
+  }
+
+  /**
+   * Constructor championship from GET /:series/standings/constructors.
+   * Stored in the same shape app.js uses for its offline mock:
+   *   [name, points, gapToLeader, colorHex]
+   */
+  async function loadConstructorStandings() {
+    const store = window.apexConstructors;
+    if (!store) return;
+
+    const results = await Promise.allSettled(
+      SERIES.map((series) => api(`/${series}/standings/constructors`)),
+    );
+
+    let loaded = 0;
+    results.forEach((result, index) => {
+      if (result.status !== 'fulfilled') {
+        console.warn(
+          `[apex] constructor fallback for ${SERIES[index]}:`,
+          result.reason?.message || result.reason,
+        );
+        return;
+      }
+      const list = result.value.standings;
+      if (!Array.isArray(list) || list.length === 0) return;
+
+      store[SERIES[index]] = list.map((team) => [
+        team.name,
+        team.points,
+        team.gapToLeader ?? 0,
+        team.colorHex || '#ff3e32',
+      ]);
+      loaded += 1;
+    });
+
+    if (loaded > 0 && typeof window.apexRender === 'function') window.apexRender();
   }
 
   function applyWeather() {
@@ -229,52 +271,76 @@
   }
 
   /**
-   * Paints the real circuit layout (SVG path from `circuits.js`) and puts a
-   * translucent trace of the circuit's tightest corner behind the details card.
+   * Paints the real circuit layout (SVG path from `circuits.js`) and sets the
+   * signature-corner photograph (from `corners.js`) behind the session card and
+   * the circuit panel. Circuits without a free photo keep the SVG trace.
    */
   function applyCircuit(circuit) {
     if (!circuit) return;
 
     const resolve = window.apexCircuitFor;
     const resolved = typeof resolve === 'function' ? resolve(circuit.shortName, circuit.name, circuit.id) : null;
+    const key = resolved ? resolved.key : 'unknown';
 
     const panel = document.getElementById('circuit-panel');
-    if (panel) {
-      const key = resolved ? resolved.key : 'unknown';
-      if (panel.dataset.circuit !== key) {
-        panel.dataset.circuit = key;
-        const path = document.getElementById('circuit-path');
-        if (path) path.setAttribute('d', resolved ? resolved.path : '');
-        const art = panel.querySelector('.corner-art path');
-        if (art) art.setAttribute('d', resolved ? resolved.corner : '');
-        const label = document.getElementById('circuit-layout');
-        if (label) label.textContent = resolved ? resolved.short : 'LAYOUT N/A';
+    if (panel && panel.dataset.circuit !== key) {
+      panel.dataset.circuit = key;
+      const path = document.getElementById('circuit-path');
+      if (path) path.setAttribute('d', resolved ? resolved.path : '');
+      const art = panel.querySelector('.corner-art path');
+      if (art) art.setAttribute('d', resolved ? resolved.corner : '');
+      const label = document.getElementById('circuit-layout');
+      if (label) label.textContent = resolved ? resolved.short : 'LAYOUT N/A';
+    }
+
+    const photo =
+      resolved && typeof window.apexCornerFor === 'function'
+        ? window.apexCornerFor(resolved.key)
+        : null;
+
+    const credit = photo
+      ? `PHOTO — ${String(photo.corner || '').toUpperCase()} · ${photo.license || 'CC'} · ${photo.credit || ''}`.trim()
+      : '';
+
+    if (panel) panel.classList.toggle('has-photo', Boolean(photo));
+
+    const paintEventPhoto = () => {
+      const node = document.getElementById('event-photo');
+      if (!node) return;
+      if (photo) {
+        if (node.getAttribute('src') !== photo.url) node.setAttribute('src', photo.url);
+        const alt = `${photo.corner || 'Circuit corner'} — ${resolved.name}`;
+        if (node.alt !== alt) node.alt = alt;
+        if (node.hidden) node.hidden = false;
+      } else if (!node.hidden) {
+        node.hidden = true;
       }
-    }
+    };
 
-    const card = document.querySelector('.event');
-    if (!card || !resolved) return;
+    const paintCornerFigure = () => {
+      const figure = document.getElementById('corner-figure');
+      const node = document.getElementById('corner-photo');
+      if (!figure || !node) return;
+      if (photo) {
+        if (node.getAttribute('src') !== photo.url) node.setAttribute('src', photo.url);
+        const alt = `${photo.corner || 'Circuit corner'} — ${resolved.name}`;
+        if (node.alt !== alt) node.alt = alt;
+        if (figure.hidden) figure.hidden = false;
+      } else if (!figure.hidden) {
+        figure.hidden = true;
+      }
+    };
 
-    let art = card.querySelector('.corner-art');
-    if (!art) {
-      art = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-      art.setAttribute('class', 'corner-art');
-      art.setAttribute('viewBox', '0 0 100 100');
-      art.setAttribute('aria-hidden', 'true');
-      const stroke = document.createElementNS('http://www.w3.org/2000/svg', 'path');
-      stroke.setAttribute('fill', 'none');
-      stroke.setAttribute('stroke', '#ff3e32');
-      stroke.setAttribute('stroke-width', '6');
-      stroke.setAttribute('stroke-linecap', 'round');
-      stroke.setAttribute('stroke-linejoin', 'round');
-      art.appendChild(stroke);
-      card.insertBefore(art, card.firstChild);
-    }
+    paintEventPhoto();
+    paintCornerFigure();
 
-    const stroke = art.querySelector('path');
-    if (stroke && stroke.getAttribute('d') !== resolved.corner) {
-      stroke.setAttribute('d', resolved.corner);
-    }
+    const setCredit = (id) => {
+      const node = document.getElementById(id);
+      if (node && node.textContent !== credit) node.textContent = credit;
+    };
+
+    setCredit('event-credit');
+    setCredit('circuit-credit');
   }
 
   /** Stint history + pit stops from GET /f1/tyres. */
@@ -372,6 +438,21 @@
     }
     set('next-countdown', countdown);
 
+    // Country flag next to the race name (flagcdn.com, no key required).
+    const flag = document.getElementById('next-flag');
+    if (flag) {
+      const code = next.countryCode ? String(next.countryCode).toLowerCase() : '';
+      if (code) {
+        const src = `https://flagcdn.com/w40/${code}.png`;
+        if (flag.getAttribute('src') !== src) flag.setAttribute('src', src);
+        const alt = next.country || 'Race country';
+        if (flag.alt !== alt) flag.alt = alt;
+        if (flag.hidden) flag.hidden = false;
+      } else if (!flag.hidden) {
+        flag.hidden = true;
+      }
+    }
+
     // Every write here re-triggers the MutationObserver, which calls this
     // function again — so the label must only change when it really differs.
     const label = bar.querySelector('.kicker');
@@ -411,7 +492,7 @@
         : [];
       if (list.length) {
         window.apexPredictions = list.slice(0, 5).map((entry) => [
-          entry.code,
+          `${entry.code}-${entry.driverNumber}`,
           String(entry.fullName).split(' ').slice(-1)[0],
           Math.round(entry.winProbability),
         ]);
@@ -525,11 +606,12 @@
   async function boot() {
     renderStrip();
     connect('f1');
-    await Promise.all([loadStandings(), loadSeriesExtras('f1')]);
+    await Promise.all([loadStandings(), loadConstructorStandings(), loadSeriesExtras('f1')]);
 
     clearInterval(refreshTimer);
     refreshTimer = setInterval(() => {
       loadStandings().catch(() => {});
+      loadConstructorStandings().catch(() => {});
     }, REFRESH_MS);
   }
 
@@ -553,6 +635,7 @@
   document.addEventListener('apex:series', (event) => {
     connect(event.detail);
     loadSeriesExtras(event.detail).catch(() => {});
+    loadConstructorStandings().catch(() => {});
   });
   document.addEventListener('apex:page', (event) => {
     const page = event.detail;
@@ -575,6 +658,7 @@
     retry = 0;
     connect(state.series);
     loadStandings().catch(() => {});
+    loadConstructorStandings().catch(() => {});
     loadSeriesExtras(state.series).catch(() => {});
   }, 2_000);
 
