@@ -29,6 +29,8 @@ export interface ReferenceConstructor {
 export interface ReferenceCircuit {
   key: string;
   name: string;
+  /** Short label for tight UI slots (e.g. "COTA"). */
+  shortName: string;
   country: string;
   latitude: number;
   longitude: number;
@@ -252,18 +254,18 @@ export const REFERENCE_CONSTRUCTORS: ReferenceConstructor[] = [
 ];
 
 export const REFERENCE_CIRCUITS: ReferenceCircuit[] = [
-  { key: 'silverstone', name: 'Silverstone Circuit', country: 'United Kingdom', latitude: 52.0786, longitude: -1.0169, lengthKm: 5.891 },
-  { key: 'monza', name: 'Autodromo Nazionale Monza', country: 'Italy', latitude: 45.6156, longitude: 9.2811, lengthKm: 5.793 },
-  { key: 'spa', name: 'Circuit de Spa-Francorchamps', country: 'Belgium', latitude: 50.4372, longitude: 5.9714, lengthKm: 7.004 },
-  { key: 'barcelona', name: 'Circuit de Barcelona-Catalunya', country: 'Spain', latitude: 41.57, longitude: 2.2611, lengthKm: 4.657 },
-  { key: 'mugello', name: 'Autodromo del Mugello', country: 'Italy', latitude: 43.9975, longitude: 11.3719, lengthKm: 5.245 },
-  { key: 'jerez', name: 'Circuito de Jerez-Ángel Nieto', country: 'Spain', latitude: 36.7083, longitude: -6.0342, lengthKm: 4.428 },
-  { key: 'bahrain', name: 'Bahrain International Circuit', country: 'Bahrain', latitude: 26.0325, longitude: 50.5106, lengthKm: 5.412 },
-  { key: 'suzuka', name: 'Suzuka International Racing Course', country: 'Japan', latitude: 34.8431, longitude: 136.5407, lengthKm: 5.807 },
-  { key: 'cota', name: 'Circuit of the Americas', country: 'United States', latitude: 30.1328, longitude: -97.6411, lengthKm: 5.513 },
-  { key: 'interlagos', name: 'Autódromo José Carlos Pace', country: 'Brazil', latitude: -23.7036, longitude: -46.6997, lengthKm: 4.309 },
-  { key: 'losail', name: 'Lusail International Circuit', country: 'Qatar', latitude: 25.49, longitude: 51.454, lengthKm: 5.38 },
-  { key: 'redbullring', name: 'Red Bull Ring', country: 'Austria', latitude: 47.2197, longitude: 14.7647, lengthKm: 4.318 },
+  { key: 'silverstone', name: 'Silverstone Circuit', shortName: 'Silverstone', country: 'United Kingdom', latitude: 52.0786, longitude: -1.0169, lengthKm: 5.891 },
+  { key: 'monza', name: 'Autodromo Nazionale Monza', shortName: 'Monza', country: 'Italy', latitude: 45.6156, longitude: 9.2811, lengthKm: 5.793 },
+  { key: 'spa', name: 'Circuit de Spa-Francorchamps', shortName: 'Spa', country: 'Belgium', latitude: 50.4372, longitude: 5.9714, lengthKm: 7.004 },
+  { key: 'barcelona', name: 'Circuit de Barcelona-Catalunya', shortName: 'Barcelona', country: 'Spain', latitude: 41.57, longitude: 2.2611, lengthKm: 4.657 },
+  { key: 'mugello', name: 'Autodromo del Mugello', shortName: 'Mugello', country: 'Italy', latitude: 43.9975, longitude: 11.3719, lengthKm: 5.245 },
+  { key: 'jerez', name: 'Circuito de Jerez-Ángel Nieto', shortName: 'Jerez', country: 'Spain', latitude: 36.7083, longitude: -6.0342, lengthKm: 4.428 },
+  { key: 'bahrain', name: 'Bahrain International Circuit', shortName: 'Bahrain', country: 'Bahrain', latitude: 26.0325, longitude: 50.5106, lengthKm: 5.412 },
+  { key: 'suzuka', name: 'Suzuka International Racing Course', shortName: 'Suzuka', country: 'Japan', latitude: 34.8431, longitude: 136.5407, lengthKm: 5.807 },
+  { key: 'cota', name: 'Circuit of the Americas', shortName: 'COTA', country: 'United States', latitude: 30.1328, longitude: -97.6411, lengthKm: 5.513 },
+  { key: 'interlagos', name: 'Autódromo José Carlos Pace', shortName: 'Interlagos', country: 'Brazil', latitude: -23.7036, longitude: -46.6997, lengthKm: 4.309 },
+  { key: 'losail', name: 'Lusail International Circuit', shortName: 'Lusail', country: 'Qatar', latitude: 25.49, longitude: 51.454, lengthKm: 5.38 },
+  { key: 'redbullring', name: 'Red Bull Ring', shortName: 'Red Bull Ring', country: 'Austria', latitude: 47.2197, longitude: 14.7647, lengthKm: 4.318 },
 ];
 
 export const REFERENCE_SESSIONS: ReferenceSession[] = [

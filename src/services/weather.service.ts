@@ -5,7 +5,7 @@ import { clamp, round, seededRandom } from '../utils/random';
 import { logger } from '../utils/logger';
 
 export interface WeatherSnapshot {
-  source: 'open-meteo' | 'fallback';
+  source: 'open-meteo' | 'openf1' | 'fallback';
   fetchedAt: string;
   airTempC: number;
   trackTempC: number;

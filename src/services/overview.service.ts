@@ -10,6 +10,7 @@ import {
 import { SERIES_LABELS, SESSION_TYPE_LABELS } from '../config/series';
 import { teamColor } from '../config/teamColors';
 import { cacheBackend } from './cache.service';
+import { getOpenF1Overview } from './liveSession.service';
 import { simulateFrame } from './simulation.service';
 import { getWeather, type WeatherSnapshot } from './weather.service';
 import { clamp, round } from '../utils/random';
@@ -27,6 +28,8 @@ export interface LiveSessionDto {
   circuit: {
     id: string;
     name: string;
+    /** Short label for tight UI slots (e.g. "COTA"). */
+    shortName: string;
     country: string;
     latitude: number;
     longitude: number;
@@ -64,6 +67,10 @@ export interface LiveOverviewResult {
     cache: 'redis' | 'memory';
     sampleRateHz: number;
     websocketPath: string;
+    /** Which upstream produced this payload. */
+    source: 'openf1' | 'database';
+    mode?: 'live' | 'replay';
+    sessionKey?: number;
   };
 }
 
@@ -98,7 +105,55 @@ function buildSession(
   };
 }
 
+/**
+ * OpenF1's first call can take a few seconds (it pulls a window of car data),
+ * so the HTTP endpoint races it against a short deadline and falls back to the
+ * database rather than making a user wait.
+ */
+const OPENF1_REQUEST_BUDGET_MS = 4_000;
+
+function withDeadline<T>(promise: Promise<T | null>, ms: number): Promise<T | null> {
+  return new Promise<T | null>((resolve) => {
+    const timer = setTimeout(() => resolve(null), ms);
+    timer.unref?.();
+
+    promise
+      .then((value) => {
+        clearTimeout(timer);
+        resolve(value);
+      })
+      .catch(() => {
+        clearTimeout(timer);
+        resolve(null);
+      });
+  });
+}
+
 export async function getLiveOverview(seriesFilter?: Series): Promise<LiveOverviewResult> {
+  // F1 has a real upstream. MotoGP/F2 still come from the database.
+  if (!seriesFilter || seriesFilter === Series.F1) {
+    const live = await withDeadline(getOpenF1Overview(), OPENF1_REQUEST_BUDGET_MS);
+
+    if (live) {
+      return {
+        session: live.session,
+        weather: live.weather,
+        leaderboard: live.leaderboard,
+        meta: {
+          generatedAt: new Date().toISOString(),
+          degraded: false,
+          databaseOnline: isDatabaseOnline(),
+          cache: cacheBackend(),
+          sampleRateHz: env.wsBroadcastHz,
+          websocketPath: env.WS_PATH,
+          source: 'openf1',
+          mode: live.mode,
+          sessionKey: live.sessionKey,
+        },
+      };
+    }
+  }
+
   const { data: sessionRecord, degraded: sessionDegraded } = await safeQuery(
     'overview.session',
     async () => {
@@ -127,6 +182,9 @@ export async function getLiveOverview(seriesFilter?: Series): Promise<LiveOvervi
         circuit: {
           id: record.circuit.id,
           name: record.circuit.name,
+          shortName:
+            REFERENCE_CIRCUITS.find((item) => item.name === record.circuit.name)?.shortName ??
+            record.circuit.name,
           country: record.circuit.country,
           latitude: record.circuit.latitude,
           longitude: record.circuit.longitude,
@@ -155,6 +213,7 @@ export async function getLiveOverview(seriesFilter?: Series): Promise<LiveOvervi
         circuit: {
           id: referenceIds.circuit(circuit.key),
           name: circuit.name,
+          shortName: circuit.shortName,
           country: circuit.country,
           latitude: circuit.latitude,
           longitude: circuit.longitude,
@@ -176,6 +235,7 @@ export async function getLiveOverview(seriesFilter?: Series): Promise<LiveOvervi
         cache: cacheBackend(),
         sampleRateHz: env.wsBroadcastHz,
         websocketPath: env.WS_PATH,
+        source: 'database',
       },
     };
   }
@@ -275,6 +335,7 @@ export async function getLiveOverview(seriesFilter?: Series): Promise<LiveOvervi
       cache: cacheBackend(),
       sampleRateHz: env.wsBroadcastHz,
       websocketPath: env.WS_PATH,
+      source: 'database',
     },
   };
 }

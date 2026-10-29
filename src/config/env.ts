@@ -23,6 +23,15 @@ const envSchema = z.object({
   OPEN_METEO_BASE_URL: z.string().url().default('https://api.open-meteo.com/v1/forecast'),
   WEATHER_CACHE_TTL_SECONDS: z.coerce.number().int().positive().default(300),
 
+  OPENF1_ENABLED: z
+    .string()
+    .default('true')
+    .transform((value) => ['1', 'true', 'yes', 'on'].includes(value.toLowerCase())),
+  OPENF1_BASE_URL: z.string().url().default('https://api.openf1.org/v1'),
+  OPENF1_TIMEOUT_MS: z.coerce.number().int().min(1_000).max(30_000).default(8_000),
+  /** Seconds of car telemetry kept in the replay/live buffer. */
+  OPENF1_WINDOW_SECONDS: z.coerce.number().int().min(20).max(300).default(90),
+
   WS_PATH: z.string().startsWith('/').default('/ws/telemetry'),
   WS_BROADCAST_INTERVAL_MS: z.coerce.number().int().min(100).max(10_000).default(500),
 

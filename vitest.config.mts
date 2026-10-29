@@ -15,6 +15,8 @@ export default defineConfig({
       REDIS_ENABLED: 'false',
       LOG_LEVEL: 'error',
       WS_BROADCAST_INTERVAL_MS: '500',
+      // The suite must never depend on a third-party API being reachable.
+      OPENF1_ENABLED: 'false',
     },
     testTimeout: 30_000,
     hookTimeout: 60_000,

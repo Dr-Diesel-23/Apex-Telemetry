@@ -6,6 +6,7 @@ import { prisma, safeQuery } from '../config/prisma';
 import { REFERENCE_DRIVERS, referenceIds } from '../config/referenceData';
 import { parseSeriesParam, SERIES_LABELS } from '../config/series';
 import { teamColor } from '../config/teamColors';
+import { getLiveTelemetryFrames } from '../services/liveSession.service';
 import { simulateFrame } from '../services/simulation.service';
 import { logger } from '../utils/logger';
 
@@ -39,6 +40,8 @@ interface TelemetryFrame {
   brake: number;
   drs: boolean;
   timestamp: string;
+  /** Race position when the frame comes from a real timing feed. */
+  position?: number;
 }
 
 export interface TelemetrySocketHandle {
@@ -265,37 +268,52 @@ export function attachTelemetryWebSocket(server: Server): TelemetrySocketHandle 
   }, ROSTER_TTL_MS);
   rosterTimer.unref();
 
+  let broadcasting = false;
+
   const broadcastTimer = setInterval(() => {
-    if (wss.clients.size === 0) return;
+    if (wss.clients.size === 0 || broadcasting) return;
 
-    const at = Date.now();
-    const seq = (sequence += 1);
-    const cacheBySeries = new Map<Series, TelemetryFrame[]>();
+    broadcasting = true;
 
-    for (const socket of wss.clients) {
-      if (socket.readyState !== WebSocket.OPEN) continue;
+    void (async () => {
+      try {
+        const at = Date.now();
+        const seq = (sequence += 1);
+        const cacheBySeries = new Map<Series, TelemetryFrame[]>();
+        const sourceBySeries = new Map<Series, 'openf1' | 'simulation'>();
 
-      const state = meta.get(socket);
-      const series = state?.series ?? defaultSeries;
+        for (const socket of wss.clients) {
+          if (socket.readyState !== WebSocket.OPEN) continue;
 
-      let frames = cacheBySeries.get(series);
-      if (!frames) {
-        frames = buildFrames(series, at);
-        cacheBySeries.set(series, frames);
+          const state = meta.get(socket);
+          const series = state?.series ?? defaultSeries;
+
+          let frames = cacheBySeries.get(series);
+          if (!frames) {
+            // Real timing for F1 when OpenF1 has a session, simulation otherwise.
+            const live = series === Series.F1 ? await getLiveTelemetryFrames(series) : null;
+            frames = live ?? buildFrames(series, at);
+            cacheBySeries.set(series, frames);
+            sourceBySeries.set(series, live ? 'openf1' : 'simulation');
+          }
+
+          socket.send(
+            JSON.stringify({
+              type: 'telemetry.snapshot',
+              seq,
+              series,
+              seriesLabel: SERIES_LABELS[series],
+              sampleRateHz: env.wsBroadcastHz,
+              source: sourceBySeries.get(series),
+              timestamp: new Date(at).toISOString(),
+              frames,
+            }),
+          );
+        }
+      } finally {
+        broadcasting = false;
       }
-
-      socket.send(
-        JSON.stringify({
-          type: 'telemetry.snapshot',
-          seq,
-          series,
-          seriesLabel: SERIES_LABELS[series],
-          sampleRateHz: env.wsBroadcastHz,
-          timestamp: new Date(at).toISOString(),
-          frames,
-        }),
-      );
-    }
+    })();
   }, env.WS_BROADCAST_INTERVAL_MS);
   broadcastTimer.unref();
 

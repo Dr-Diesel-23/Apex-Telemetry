@@ -1,9 +1,15 @@
 # ApexTelemetry — Backend
 
 Node.js + Express + TypeScript backend for the ApexTelemetry motorsport dashboard
-(Formula 1, Formula 2, MotoGP). It serves live race overview data, championship
+(Formula 1 and MotoGP). It serves live race overview data, championship
 standings, AI-style win probabilities, news, driver telemetry comparisons and a
 2 Hz WebSocket telemetry feed.
+
+**Formula 1 is wired to live upstreams:** [OpenF1](https://api.openf1.org/v1) for
+timing, car telemetry, championship points and track weather, with
+[Open-Meteo](https://api.open-meteo.com/v1/forecast) for the database/MotoGP
+paths and as a fallback. When no session is running, the last session's closing
+laps are replayed at 2 Hz so the dashboard always shows real cars.
 
 ```
                     ┌─────────────────────────────────────────────┐
@@ -13,6 +19,7 @@ standings, AI-style win probabilities, news, driver telemetry comparisons and a
                     │   └─ telemetry  (compare)                   │
                     ├─────────────────────────────────────────────┤
                     │  Services                                   │
+                    │   ├─ OpenF1 → live F1 timing + telemetry    │
                     │   ├─ Prisma → PostgreSQL                    │
                     │   ├─ Open-Meteo (p-queue rate-limited)      │
                     │   ├─ Redis / in-memory cache                │
@@ -56,6 +63,22 @@ npm start
 
 The server listens on `http://localhost:4000` by default.
 
+### Dashboard
+
+The static dashboard lives in `Frontend/` (zero dependencies, no build step):
+
+```bash
+cd Frontend
+npm start            # serves http://127.0.0.1:5173
+```
+
+It renders from mock data first, then upgrades itself: standings from
+`/:series/standings/drivers`, session/weather/predictions from
+`/overview/*`, and the 2 Hz telemetry strip from `/ws/telemetry`. The API base
+defaults to `http://localhost:4000/api/v1` and can be changed on the **API
+config** page (persisted in `localStorage` as `apex-url`). If the backend is
+unreachable the strip shows `RECONNECTING...` and the mock data stays on screen.
+
 ### Verify the install
 
 ```bash
@@ -76,6 +99,10 @@ node scripts/wsSmokeTest.js
 | `REDIS_URL` | `redis://localhost:6379` | Redis connection string |
 | `OPEN_METEO_BASE_URL` | Open-Meteo forecast endpoint | Weather upstream |
 | `WEATHER_CACHE_TTL_SECONDS` | `300` | Weather cache TTL |
+| `OPENF1_ENABLED` | `true` | Use OpenF1 for live F1 data |
+| `OPENF1_BASE_URL` | `https://api.openf1.org/v1` | OpenF1 API base |
+| `OPENF1_TIMEOUT_MS` | `8000` | Per-request upstream timeout |
+| `OPENF1_WINDOW_SECONDS` | `90` | Seconds of car data kept for live/replay |
 | `WS_PATH` | `/ws/telemetry` | WebSocket route |
 | `WS_BROADCAST_INTERVAL_MS` | `500` | Telemetry broadcast interval (2 Hz) |
 | `CORS_ORIGIN` | `*` | Comma-separated allow-list, or `*` |
@@ -90,7 +117,7 @@ Base URL: `/api/v1`
 
 | Method | Endpoint | Description |
 | --- | --- | --- |
-| `GET` | `/overview/live?series=f1` | Active session, circuit, live order, Open-Meteo weather |
+| `GET` | `/overview/live?series=f1` | Active session, circuit, live order, weather (OpenF1 for F1) |
 | `GET` | `/overview/predictions?series=f1&racesRemaining=6` | Simulated win/podium/pole probabilities |
 | `GET` | `/overview/news?series=motogp&limit=20` | News feed (optionally filtered by series) |
 | `GET` | `/:series/standings/drivers` | Driver championship standings |
@@ -99,7 +126,34 @@ Base URL: `/api/v1`
 | `GET` | `/health` and `/api/v1/health` | Liveness + DB/WS status |
 
 `:series` accepts `f1`, `f2`, `motogp` (case-insensitive; `formula-1`, `moto-gp`
-also work). Invalid series return `400`.
+also work). Invalid series return `400`. The dashboard exposes **F1 and MotoGP**;
+the `f2` routes remain on the API for compatibility.
+
+### Live data sources
+
+| Series | Session + timing | Car telemetry | Weather |
+| --- | --- | --- | --- |
+| F1 | OpenF1 `/sessions`, `/position`, `/championship_drivers`, `/championship_teams` | OpenF1 `/car_data` | OpenF1 `/weather` |
+| MotoGP | PostgreSQL (seeded) | deterministic simulator | Open-Meteo |
+| any (fallback) | PostgreSQL + simulator | deterministic simulator | Open-Meteo |
+
+How the F1 path behaves:
+
+- **Live session** — the latest OpenF1 session is cached for 30 s; frames are
+  read at "now" from the trailing `OPENF1_WINDOW_SECONDS` of car data.
+- **Finished session** — the API replays the closing 90 s of real car data in a
+  loop, anchored on the last `/position` update (not the scheduled `date_end`,
+  which would replay parked cars). `meta.mode` is `"replay"`.
+- **Rate limits** — every upstream call goes through a `p-queue` (1 at a time,
+  ~2.5 req/s), 429/5xx responses are retried with exponential backoff and
+  `Retry-After` support, and a per-endpoint failure only blanks that panel. If a
+  panel fails, the previous copy from the same session is reused.
+- **Wins / podiums** — not present in the championship feed, so they are counted
+  from every completed race of the season in the background (scan lane at
+  20 req/min, cached 6 h).
+- **Fallback** — if OpenF1 is unreachable or returns no car data, the request
+  falls back to PostgreSQL and the simulator, and `meta.source` becomes
+  `"database"`.
 
 ### Examples
 
@@ -160,10 +214,18 @@ curl "http://localhost:4000/api/v1/overview/live"
     "databaseOnline": true,
     "cache": "memory",
     "sampleRateHz": 2,
-    "websocketPath": "/ws/telemetry"
+    "websocketPath": "/ws/telemetry",
+    "source": "openf1",
+    "mode": "replay",
+    "sessionKey": 11396
   }
 }
 ```
+
+`meta.source` is `"openf1"` when the payload came from the live feed and
+`"database"` when it came from PostgreSQL/simulation. In replay mode the
+`session.circuit` is enriched from the reference table (coordinates and track
+length), because OpenF1 only ships a short circuit name.
 
 `GET /api/v1/f1/telemetry/compare?driver1=VER&driver2=NOR` returns two
 `drivers[]` objects with `stats` (`maxSpeed`, `avgSpeed`, `topGear`,
@@ -212,6 +274,7 @@ Snapshot:
   "series": "F1",
   "seriesLabel": "Formula 1",
   "sampleRateHz": 2,
+  "source": "openf1",
   "timestamp": "2026-10-28T15:00:23.500Z",
   "frames": [
     {
@@ -237,6 +300,9 @@ Client → server:
 
 - `{"type":"subscribe","series":"motogp"}` → `{"type":"subscribed",...}`
 - `{"type":"ping"}` → `{"type":"pong","timestamp":"…"}`
+
+`source` is `"openf1"` for real F1 frames and `"simulation"` when the fallback
+generator produced them.
 
 Heartbeat pings run every 30 s; dead sockets are terminated.
 
@@ -326,6 +392,11 @@ What is covered:
 | WebSocket | handshake, 2 Hz cadence, frame shape, subscribe switch, ping/pong, bad series |
 
 `tsconfig.test.json` type-checks the tests as part of `npm run typecheck`.
+
+Tests run with `OPENF1_ENABLED=false` (see `vitest.config.mts`), so the suite
+never depends on a third-party API being reachable or on the current race
+calendar. OpenF1 behaviour is covered by the manual checks in
+[Live data sources](#live-data-sources).
 
 ## Scripts
 

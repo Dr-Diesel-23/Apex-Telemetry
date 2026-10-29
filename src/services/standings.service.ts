@@ -1,6 +1,9 @@
 import { Series } from '@prisma/client';
 import { prisma, safeQuery } from '../config/prisma';
 import { REFERENCE_CONSTRUCTORS, REFERENCE_DRIVERS, referenceIds } from '../config/referenceData';
+import { getOpenF1SeasonStats, getOpenF1TeamStandings, type OpenF1Driver } from './openf1.service';
+import { getOpenF1Championship, getOpenF1Drivers } from './liveSession.service';
+import { teamColor } from '../config/teamColors';
 import { round } from '../utils/random';
 
 export interface DriverStanding {
@@ -62,7 +65,89 @@ function buildConstructorStandings(rows: Array<Omit<ConstructorStanding, 'positi
   }));
 }
 
+async function loadOpenF1DriverStandings(
+  series: Series,
+): Promise<StandingsResult<DriverStanding> | null> {
+  const [championship, drivers] = await Promise.allSettled([
+    getOpenF1Championship(),
+    getOpenF1Drivers(),
+  ]);
+
+  const table = championship.status === 'fulfilled' ? championship.value : [];
+  const roster: Map<number, OpenF1Driver> =
+    drivers.status === 'fulfilled' ? drivers.value : new Map();
+  if (table.length === 0 || roster.size === 0) return null;
+
+  // Wins/podiums come from the season scan (not in the championship feed).
+  const season = getOpenF1SeasonStats();
+
+  const standings = buildDriverStandings(
+    table.map((entry) => {
+      const driver = roster.get(entry.driverNumber);
+      return {
+        driverId: `openf1:driver:${entry.driverNumber}`,
+        code: driver?.code ?? `#${entry.driverNumber}`,
+        driverNumber: entry.driverNumber,
+        fullName: driver?.fullName ?? `Car ${entry.driverNumber}`,
+        teamName: driver?.teamName ?? 'Unknown',
+        series,
+        points: round(entry.points, 1),
+        wins: season?.wins.get(entry.driverNumber) ?? 0,
+        podiums: season?.podiums.get(entry.driverNumber) ?? 0,
+      };
+    }),
+  );
+
+  return {
+    series,
+    updatedAt: new Date().toISOString(),
+    count: standings.length,
+    leaderPoints: standings[0]?.points ?? 0,
+    standings,
+    degraded: false,
+  };
+}
+
+async function loadOpenF1ConstructorStandings(
+  series: Series,
+): Promise<StandingsResult<ConstructorStanding> | null> {
+  const teams = await getOpenF1TeamStandings().catch(() => []);
+  if (teams.length === 0) return null;
+
+  const { data: dbTeams } = await safeQuery(
+    'standings.openf1_team_meta',
+    () => prisma.constructor.findMany({ where: { series } }),
+    () => [] as Array<{ name: string; colorHex: string }>,
+  );
+  const dbByName = new Map(dbTeams.map((team) => [team.name.toLowerCase(), team]));
+
+  const standings = buildConstructorStandings(
+    teams.map((team) => ({
+      constructorId: `openf1:team:${team.teamName}`,
+      name: team.teamName,
+      series,
+      points: round(team.points, 1),
+      colorHex: dbByName.get(team.teamName.toLowerCase())?.colorHex ?? teamColor(team.teamName),
+    })),
+  );
+
+  return {
+    series,
+    updatedAt: new Date().toISOString(),
+    count: standings.length,
+    leaderPoints: standings[0]?.points ?? 0,
+    standings,
+    degraded: false,
+  };
+}
+
 export async function getDriverStandings(series: Series): Promise<StandingsResult<DriverStanding>> {
+  // Real F1 championship from OpenF1; MotoGP/F2 stay on the database.
+  if (series === Series.F1) {
+    const openF1 = await loadOpenF1DriverStandings(series);
+    if (openF1) return openF1;
+  }
+
   const { data, degraded } = await safeQuery(
     'standings.drivers',
     () =>
@@ -102,6 +187,11 @@ export async function getDriverStandings(series: Series): Promise<StandingsResul
 }
 
 export async function getConstructorStandings(series: Series): Promise<StandingsResult<ConstructorStanding>> {
+  if (series === Series.F1) {
+    const openF1 = await loadOpenF1ConstructorStandings(series);
+    if (openF1) return openF1;
+  }
+
   const { data, degraded } = await safeQuery(
     'standings.constructors',
     () =>

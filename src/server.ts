@@ -4,6 +4,7 @@ import { env } from './config/env';
 import { connectDatabase, disconnectDatabase, isDatabaseOnline } from './config/prisma';
 import { attachTelemetryWebSocket } from './websocket/telemetry.ws';
 import { cache } from './services/cache.service';
+import { getOpenF1Context } from './services/openf1.service';
 import { logger } from './utils/logger';
 
 async function bootstrap(): Promise<void> {
@@ -24,6 +25,10 @@ async function bootstrap(): Promise<void> {
 
   // Warm the DB connection but never block the HTTP listener on it.
   void connectDatabase();
+
+  // Pre-fetch the latest OpenF1 session so the first dashboard load is served
+  // from cache instead of waiting on six upstream calls.
+  void getOpenF1Context().catch(() => undefined);
 
   // Recover automatically once PostgreSQL comes back (circuit breaker probe).
   const reconnectTimer = setInterval(() => {
