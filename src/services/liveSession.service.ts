@@ -9,6 +9,7 @@ import {
   type OpenF1Driver,
 } from './openf1.service';
 import type { LiveDriverDto, LiveSessionDto } from './overview.service';
+import { compoundFor } from './tyre.service';
 import type { WeatherSnapshot } from './weather.service';
 
 /**
@@ -34,6 +35,14 @@ export interface LiveTelemetryFrame {
   throttle: number;
   brake: number;
   drs: boolean;
+  /** Compound currently fitted, when the session publishes stints. */
+  tyre?: {
+    compound: string;
+    compoundLabel: string;
+    colorHex: string;
+    textColor: string;
+    laps: number;
+  };
   timestamp: string;
 }
 
@@ -104,6 +113,21 @@ function driverId(driver: OpenF1Driver): string {
 
 function teamColorFor(driver: OpenF1Driver): string {
   return /^#[0-9a-f]{6}$/i.test(driver.teamColour) ? driver.teamColour : '#8C99A5';
+}
+
+/** Compound on the car right now, plus the laps run on that set. */
+function tyreFor(context: OpenF1Context, driverNumber: number) {
+  const current = context.stints.get(driverNumber)?.at(-1);
+  if (!current) return undefined;
+
+  const compound = compoundFor(current.compound);
+  return {
+    compound: compound.code,
+    compoundLabel: compound.label,
+    colorHex: compound.colorHex,
+    textColor: compound.textColor,
+    laps: Math.max(0, current.lapEnd - current.lapStart + 1) + current.tyreAgeAtStart,
+  };
 }
 
 /**
@@ -192,6 +216,7 @@ export function buildFrames(context: OpenF1Context, at: number): LiveTelemetryFr
       throttle: round(sample.throttle, 1),
       brake: round(sample.brake, 1),
       drs: sample.drs,
+      tyre: tyreFor(context, driver.driverNumber),
       timestamp: new Date(sample.t).toISOString(),
     });
   }
@@ -199,12 +224,16 @@ export function buildFrames(context: OpenF1Context, at: number): LiveTelemetryFr
   return frames.sort((a, b) => a.position - b.position);
 }
 
-/** Frames for the WebSocket feed, or `null` when OpenF1 cannot serve them. */
+/** Frames for the WebSocket feed, or `null` when there is no live session. */
 export async function getLiveTelemetryFrames(series: Series): Promise<LiveTelemetryFrame[] | null> {
   if (series !== Series.F1) return null;
 
   const context = await getOpenF1Context();
   if (!context) return null;
+
+  // Replays of a finished session are historical data, not live telemetry:
+  // the dashboard only streams cars while a session is actually running.
+  if (context.mode !== 'live') return null;
 
   const frames = buildFrames(context, cursorFor(context));
   return frames.length > 0 ? frames : null;
@@ -234,6 +263,7 @@ export async function getOpenF1Overview(): Promise<OpenF1Overview | null> {
       throttle: frame.throttle,
       brake: frame.brake,
       drs: frame.drs,
+      tyre: frame.tyre,
       lastUpdated: frame.timestamp,
       championshipPosition: standing?.position ?? index + 1,
       points: round(standing?.points ?? 0, 1),

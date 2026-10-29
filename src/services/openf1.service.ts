@@ -49,6 +49,23 @@ export interface OpenF1CarSample {
   drs: boolean;
 }
 
+export interface OpenF1Stint {
+  stintNumber: number;
+  /** SOFT / MEDIUM / HARD / INTERMEDIATE / WET (uppercase). */
+  compound: string;
+  lapStart: number;
+  lapEnd: number;
+  /** Laps already on the tyre when the stint began (scrubbed sets, etc.). */
+  tyreAgeAtStart: number;
+}
+
+export interface OpenF1PitStop {
+  lapNumber: number;
+  /** Time spent in the pit lane, seconds. */
+  pitDuration: number | null;
+  date: string;
+}
+
 export interface OpenF1Standing {
   position: number;
   points: number;
@@ -70,6 +87,12 @@ export interface OpenF1Context {
   weather: WeatherSnapshot | null;
   /** Car telemetry by driver number, sorted by time. */
   carData: Map<number, OpenF1CarSample[]>;
+  /** Tyre stints by driver number, ordered by stint number. */
+  stints: Map<number, OpenF1Stint[]>;
+  /** Pit stops by driver number, ordered by lap. */
+  pitStops: Map<number, OpenF1PitStop[]>;
+  /** Race distance in laps (0 when the session has no stints). */
+  totalLaps: number;
   windowStart: number;
   windowEnd: number;
   mode: 'live' | 'replay';
@@ -143,6 +166,24 @@ interface RawSessionResult {
   position: number | null;
 }
 
+interface RawStint {
+  driver_number: number;
+  stint_number: number;
+  lap_start: number;
+  lap_end: number;
+  compound: string | null;
+  tyre_age_at_start: number | null;
+}
+
+interface RawPit {
+  date: string;
+  driver_number: number;
+  lap_number: number;
+  pit_duration: number | null;
+  lane_duration: number | null;
+  stop_duration: number | null;
+}
+
 const LIVE_TTL_MS = 30_000;
 const REPLAY_TTL_MS = 10 * 60_000;
 const FAILURE_COOLDOWN_MS = 60_000;
@@ -168,9 +209,9 @@ let scanQueuePromise: Promise<OutboundQueue> | null = null;
 function openF1Queue(lane: 'live' | 'scan' = 'live'): Promise<OutboundQueue> {
   if (lane === 'scan') {
     // The free tier allows ~30 requests/minute in total, so the historical
-    // scan trickles at 20/min and leaves headroom for the dashboard.
+    // scan trickles at ~17/min and leaves headroom for the dashboard.
     scanQueuePromise ??= import('p-queue').then(
-      ({ default: PQueue }) => new PQueue({ concurrency: 1, interval: 3_000, intervalCap: 1 }),
+      ({ default: PQueue }) => new PQueue({ concurrency: 1, interval: 3_500, intervalCap: 1 }),
     );
     return scanQueuePromise;
   }
@@ -291,6 +332,53 @@ function toCarSamples(rows: RawCarData[]): Map<number, OpenF1CarSample[]> {
   return byDriver;
 }
 
+function toStints(rows: RawStint[]): Map<number, OpenF1Stint[]> {
+  const byDriver = new Map<number, OpenF1Stint[]>();
+
+  for (const row of rows) {
+    if (!row.compound) continue;
+    const stint: OpenF1Stint = {
+      stintNumber: row.stint_number,
+      compound: row.compound.toUpperCase(),
+      lapStart: row.lap_start,
+      lapEnd: row.lap_end,
+      tyreAgeAtStart: row.tyre_age_at_start ?? 0,
+    };
+
+    const bucket = byDriver.get(row.driver_number);
+    if (bucket) bucket.push(stint);
+    else byDriver.set(row.driver_number, [stint]);
+  }
+
+  for (const list of byDriver.values()) {
+    list.sort((a, b) => a.stintNumber - b.stintNumber);
+  }
+
+  return byDriver;
+}
+
+function toPitStops(rows: RawPit[]): Map<number, OpenF1PitStop[]> {
+  const byDriver = new Map<number, OpenF1PitStop[]>();
+
+  for (const row of rows) {
+    const stop: OpenF1PitStop = {
+      lapNumber: row.lap_number,
+      pitDuration: row.pit_duration ?? row.lane_duration ?? row.stop_duration ?? null,
+      date: row.date,
+    };
+
+    const bucket = byDriver.get(row.driver_number);
+    if (bucket) bucket.push(stop);
+    else byDriver.set(row.driver_number, [stop]);
+  }
+
+  for (const list of byDriver.values()) {
+    list.sort((a, b) => a.lapNumber - b.lapNumber);
+  }
+
+  return byDriver;
+}
+
 function latestPositions(rows: RawPosition[]): Map<number, number> {
   const latest = new Map<number, { t: number; position: number }>();
 
@@ -364,17 +452,20 @@ async function loadContext(): Promise<OpenF1Context | null> {
   const session = mapSession(rawSession);
   const sessionKey = session.sessionKey;
 
-  const [drivers, positions, championship, teams, weather] = await Promise.allSettled([
-    get<RawDriver>('/drivers', { session_key: sessionKey }),
-    get<RawPosition>('/position', { session_key: sessionKey }),
-    get<RawChampionship>('/championship_drivers', { session_key: sessionKey }),
-    get<RawChampionshipTeam>('/championship_teams', { session_key: sessionKey }),
-    get<RawWeather>('/weather', { session_key: sessionKey }),
-  ]);
+  const [drivers, positions, championship, teams, weather, stints, pitStops] =
+    await Promise.allSettled([
+      get<RawDriver>('/drivers', { session_key: sessionKey }),
+      get<RawPosition>('/position', { session_key: sessionKey }),
+      get<RawChampionship>('/championship_drivers', { session_key: sessionKey }),
+      get<RawChampionshipTeam>('/championship_teams', { session_key: sessionKey }),
+      get<RawWeather>('/weather', { session_key: sessionKey }),
+      get<RawStint>('/stints', { session_key: sessionKey }),
+      get<RawPit>('/pit', { session_key: sessionKey }),
+    ]);
 
   // A single upstream hiccup should degrade one panel, not the whole payload,
   // so each failure is logged rather than thrown.
-  const sources = { drivers, positions, championship, teams, weather } as const;
+  const sources = { drivers, positions, championship, teams, weather, stints, pitStops } as const;
   for (const [name, result] of Object.entries(sources)) {
     if (result.status === 'rejected') {
       logger.warn('openf1.endpoint_failed', {
@@ -472,6 +563,19 @@ async function loadContext(): Promise<OpenF1Context | null> {
       ? latestWeather(weather.value)
       : (previous?.weather ?? null);
 
+  const stintTable: Map<number, OpenF1Stint[]> =
+    stints.status === 'fulfilled' ? toStints(stints.value) : (previous?.stints ?? new Map());
+
+  const pitStopTable: Map<number, OpenF1PitStop[]> =
+    pitStops.status === 'fulfilled'
+      ? toPitStops(pitStops.value)
+      : (previous?.pitStops ?? new Map());
+
+  const totalLaps = [...stintTable.values()].reduce(
+    (max, list) => list.reduce((inner, stint) => Math.max(inner, stint.lapEnd), max),
+    0,
+  );
+
   return {
     session,
     drivers: roster,
@@ -481,6 +585,9 @@ async function loadContext(): Promise<OpenF1Context | null> {
     teams: teamTable,
     weather: weatherSnapshot,
     carData: usable,
+    stints: stintTable,
+    pitStops: pitStopTable,
+    totalLaps,
     windowStart,
     windowEnd: end,
     mode: session.isLive ? 'live' : 'replay',

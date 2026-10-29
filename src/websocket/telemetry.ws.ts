@@ -42,6 +42,14 @@ interface TelemetryFrame {
   timestamp: string;
   /** Race position when the frame comes from a real timing feed. */
   position?: number;
+  /** Compound fitted when the frame comes from a real timing feed. */
+  tyre?: {
+    compound: string;
+    compoundLabel: string;
+    colorHex: string;
+    textColor: string;
+    laps: number;
+  };
 }
 
 export interface TelemetrySocketHandle {
@@ -280,7 +288,7 @@ export function attachTelemetryWebSocket(server: Server): TelemetrySocketHandle 
         const at = Date.now();
         const seq = (sequence += 1);
         const cacheBySeries = new Map<Series, TelemetryFrame[]>();
-        const sourceBySeries = new Map<Series, 'openf1' | 'simulation'>();
+        const sourceBySeries = new Map<Series, 'openf1' | 'simulation' | 'idle'>();
 
         for (const socket of wss.clients) {
           if (socket.readyState !== WebSocket.OPEN) continue;
@@ -290,11 +298,12 @@ export function attachTelemetryWebSocket(server: Server): TelemetrySocketHandle 
 
           let frames = cacheBySeries.get(series);
           if (!frames) {
-            // Real timing for F1 when OpenF1 has a session, simulation otherwise.
+            // Real timing only while the session is actually running. With no
+            // live session the feed is empty and the dashboard says so.
             const live = series === Series.F1 ? await getLiveTelemetryFrames(series) : null;
-            frames = live ?? buildFrames(series, at);
+            frames = live ?? (env.SIMULATED_TELEMETRY ? buildFrames(series, at) : []);
             cacheBySeries.set(series, frames);
-            sourceBySeries.set(series, live ? 'openf1' : 'simulation');
+            sourceBySeries.set(series, live ? 'openf1' : frames.length ? 'simulation' : 'idle');
           }
 
           socket.send(
@@ -305,6 +314,8 @@ export function attachTelemetryWebSocket(server: Server): TelemetrySocketHandle 
               seriesLabel: SERIES_LABELS[series],
               sampleRateHz: env.wsBroadcastHz,
               source: sourceBySeries.get(series),
+              /** True only when these frames came from a running session. */
+              live: sourceBySeries.get(series) === 'openf1',
               timestamp: new Date(at).toISOString(),
               frames,
             }),

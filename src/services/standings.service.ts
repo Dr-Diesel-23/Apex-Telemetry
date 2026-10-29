@@ -3,6 +3,7 @@ import { prisma, safeQuery } from '../config/prisma';
 import { REFERENCE_CONSTRUCTORS, REFERENCE_DRIVERS, referenceIds } from '../config/referenceData';
 import { getOpenF1SeasonStats, getOpenF1TeamStandings, type OpenF1Driver } from './openf1.service';
 import { getOpenF1Championship, getOpenF1Drivers } from './liveSession.service';
+import { getMotoGPStandings } from './motogp.service';
 import { teamColor } from '../config/teamColors';
 import { round } from '../utils/random';
 
@@ -141,11 +142,72 @@ async function loadOpenF1ConstructorStandings(
   };
 }
 
+async function loadMotoGPDriverStandings(
+  series: Series,
+): Promise<StandingsResult<DriverStanding> | null> {
+  const data = await getMotoGPStandings().catch(() => null);
+  if (!data || data.riders.length === 0) return null;
+
+  const standings = buildDriverStandings(
+    data.riders.map((rider) => ({
+      driverId: `motogp:rider:${rider.riderNumber}`,
+      code: rider.code,
+      driverNumber: rider.riderNumber,
+      fullName: rider.fullName,
+      teamName: rider.teamName,
+      series,
+      points: round(rider.points, 1),
+      wins: rider.wins,
+      podiums: rider.podiums,
+    })),
+  );
+
+  return {
+    series,
+    updatedAt: data.updatedAt,
+    count: standings.length,
+    leaderPoints: standings[0]?.points ?? 0,
+    standings,
+    degraded: false,
+  };
+}
+
+async function loadMotoGPConstructorStandings(
+  series: Series,
+): Promise<StandingsResult<ConstructorStanding> | null> {
+  const data = await getMotoGPStandings().catch(() => null);
+  if (!data || data.teams.length === 0) return null;
+
+  const standings = buildConstructorStandings(
+    data.teams.map((team) => ({
+      constructorId: `motogp:team:${team.name}`,
+      name: team.name,
+      series,
+      points: round(team.points, 1),
+      colorHex: teamColor(team.name),
+    })),
+  );
+
+  return {
+    series,
+    updatedAt: data.updatedAt,
+    count: standings.length,
+    leaderPoints: standings[0]?.points ?? 0,
+    standings,
+    degraded: false,
+  };
+}
+
 export async function getDriverStandings(series: Series): Promise<StandingsResult<DriverStanding>> {
-  // Real F1 championship from OpenF1; MotoGP/F2 stay on the database.
+  // Real F1 championship from OpenF1; real MotoGP table from Pulse Live.
   if (series === Series.F1) {
     const openF1 = await loadOpenF1DriverStandings(series);
     if (openF1) return openF1;
+  }
+
+  if (series === Series.MOTOGP) {
+    const motogp = await loadMotoGPDriverStandings(series);
+    if (motogp) return motogp;
   }
 
   const { data, degraded } = await safeQuery(
@@ -190,6 +252,11 @@ export async function getConstructorStandings(series: Series): Promise<Standings
   if (series === Series.F1) {
     const openF1 = await loadOpenF1ConstructorStandings(series);
     if (openF1) return openF1;
+  }
+
+  if (series === Series.MOTOGP) {
+    const motogp = await loadMotoGPConstructorStandings(series);
+    if (motogp) return motogp;
   }
 
   const { data, degraded } = await safeQuery(

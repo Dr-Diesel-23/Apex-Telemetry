@@ -11,6 +11,12 @@ timing, car telemetry, championship points and track weather, with
 paths and as a fallback. When no session is running, the last session's closing
 laps are replayed at 2 Hz so the dashboard always shows real cars.
 
+Every upstream is **free and key-less**: [Jolpica](https://api.jolpi.ca) (the
+community Ergast successor) supplies the F1 race calendar and
+[Pulse Live](https://api.motogp.pulselive.com/motogp/v1) (the public API behind
+motogp.com) supplies real MotoGP standings and the MotoGP calendar. No sign-up,
+no API key, no paid tier.
+
 ```
                     ┌─────────────────────────────────────────────┐
   HTTP  ──────────▶ │  Express 5  /api/v1                         │
@@ -103,6 +109,11 @@ node scripts/wsSmokeTest.js
 | `OPENF1_BASE_URL` | `https://api.openf1.org/v1` | OpenF1 API base |
 | `OPENF1_TIMEOUT_MS` | `8000` | Per-request upstream timeout |
 | `OPENF1_WINDOW_SECONDS` | `90` | Seconds of car data kept for live/replay |
+| `JOLPICA_ENABLED` | `true` | Use Jolpica for the F1 calendar (no key) |
+| `JOLPICA_BASE_URL` | `https://api.jolpi.ca/ergast/f1` | Jolpica API base |
+| `MOTOGP_API_ENABLED` | `true` | Use Pulse Live for MotoGP standings/calendar (no key) |
+| `MOTOGP_API_BASE_URL` | `https://api.motogp.pulselive.com/motogp/v1` | MotoGP API base |
+| `SIMULATED_TELEMETRY` | `false` | Stream simulated frames when no session is live (demos only) |
 | `WS_PATH` | `/ws/telemetry` | WebSocket route |
 | `WS_BROADCAST_INTERVAL_MS` | `500` | Telemetry broadcast interval (2 Hz) |
 | `CORS_ORIGIN` | `*` | Comma-separated allow-list, or `*` |
@@ -123,6 +134,8 @@ Base URL: `/api/v1`
 | `GET` | `/:series/standings/drivers` | Driver championship standings |
 | `GET` | `/:series/standings/constructors` | Constructor/team standings |
 | `GET` | `/:series/telemetry/compare?driver1=VER&driver2=NOR&limit=120` | Speed/gear/throttle comparison |
+| `GET` | `/:series/tyres` | Tyre strategy: stints, compounds, laps per set, pit stops (F1) |
+| `GET` | `/:series/schedule` | Season calendar with the next and last race (Jolpica / Pulse Live) |
 | `GET` | `/health` and `/api/v1/health` | Liveness + DB/WS status |
 
 `:series` accepts `f1`, `f2`, `motogp` (case-insensitive; `formula-1`, `moto-gp`
@@ -134,7 +147,9 @@ the `f2` routes remain on the API for compatibility.
 | Series | Session + timing | Car telemetry | Weather |
 | --- | --- | --- | --- |
 | F1 | OpenF1 `/sessions`, `/position`, `/championship_drivers`, `/championship_teams` | OpenF1 `/car_data` | OpenF1 `/weather` |
-| MotoGP | PostgreSQL (seeded) | deterministic simulator | Open-Meteo |
+| F1 tyres | OpenF1 `/stints`, `/pit` | - | - |
+| F1 calendar | Jolpica `/current/races.json` (6 h cache) | - | - |
+| MotoGP | Pulse Live `/results/standings`, `/results/events` (10 min cache) | deterministic simulator | Open-Meteo |
 | any (fallback) | PostgreSQL + simulator | deterministic simulator | Open-Meteo |
 
 How the F1 path behaves:
@@ -275,6 +290,7 @@ Snapshot:
   "seriesLabel": "Formula 1",
   "sampleRateHz": 2,
   "source": "openf1",
+  "live": true,
   "timestamp": "2026-10-28T15:00:23.500Z",
   "frames": [
     {
@@ -303,6 +319,13 @@ Client → server:
 
 `source` is `"openf1"` for real F1 frames and `"simulation"` when the fallback
 generator produced them.
+
+**Live-only feed.** Frames are only broadcast while a session is actually
+running. With no live session the snapshot carries `"live": false`,
+`"source": "idle"` and `"frames": []`, and the dashboard renders a
+`NO LIVE SESSION` state instead of animating historical data. Set
+`SIMULATED_TELEMETRY=true` to fall back to the deterministic simulator
+(demos/offline development); those frames are still marked `"live": false`.
 
 Heartbeat pings run every 30 s; dead sockets are terminated.
 
@@ -395,8 +418,9 @@ What is covered:
 
 Tests run with `OPENF1_ENABLED=false` (see `vitest.config.mts`), so the suite
 never depends on a third-party API being reachable or on the current race
-calendar. OpenF1 behaviour is covered by the manual checks in
-[Live data sources](#live-data-sources).
+calendar. `SIMULATED_TELEMETRY=true` keeps the WebSocket cadence/frame-shape
+tests deterministic; production defaults to live-only. OpenF1 behaviour is
+covered by the manual checks in [Live data sources](#live-data-sources).
 
 ## Scripts
 

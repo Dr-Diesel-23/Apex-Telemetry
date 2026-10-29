@@ -32,6 +32,39 @@ const envSchema = z.object({
   /** Seconds of car telemetry kept in the replay/live buffer. */
   OPENF1_WINDOW_SECONDS: z.coerce.number().int().min(20).max(300).default(90),
 
+  /**
+   * Jolpica is the community successor to Ergast (no API key). Used for the F1
+   * race calendar, and as a standings fallback.
+   */
+  JOLPICA_ENABLED: z
+    .string()
+    .default('true')
+    .transform((value) => ['1', 'true', 'yes', 'on'].includes(value.toLowerCase())),
+  JOLPICA_BASE_URL: z.string().url().default('https://api.jolpi.ca/ergast/f1'),
+
+  /**
+   * MotoGP publishes its results through the public Pulse Live API that powers
+   * motogp.com. No key, no quota worth worrying about.
+   */
+  MOTOGP_API_ENABLED: z
+    .string()
+    .default('true')
+    .transform((value) => ['1', 'true', 'yes', 'on'].includes(value.toLowerCase())),
+  MOTOGP_API_BASE_URL: z
+    .string()
+    .url()
+    .default('https://api.motogp.pulselive.com/motogp/v1'),
+
+  /**
+   * Live telemetry is only streamed while a session is running. Set this to
+   * `true` to fall back to the deterministic simulator when the track is
+   * quiet (handy for demos, never for production).
+   */
+  SIMULATED_TELEMETRY: z
+    .string()
+    .default('false')
+    .transform((value) => ['1', 'true', 'yes', 'on'].includes(value.toLowerCase())),
+
   WS_PATH: z.string().startsWith('/').default('/ws/telemetry'),
   WS_BROADCAST_INTERVAL_MS: z.coerce.number().int().min(100).max(10_000).default(500),
 

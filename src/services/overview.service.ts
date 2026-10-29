@@ -51,6 +51,14 @@ export interface LiveDriverDto {
   throttle: number;
   brake: number;
   drs: boolean;
+  /** Tyre fitted when the frame was sampled (F1/OpenF1 only). */
+  tyre?: {
+    compound: string;
+    compoundLabel: string;
+    colorHex: string;
+    textColor: string;
+    laps: number;
+  };
   lastUpdated: string;
   championshipPosition: number;
   points: number;
@@ -70,6 +78,8 @@ export interface LiveOverviewResult {
     /** Which upstream produced this payload. */
     source: 'openf1' | 'database';
     mode?: 'live' | 'replay';
+    /** True only while a session is actually running. */
+    live?: boolean;
     sessionKey?: number;
   };
 }
@@ -148,6 +158,7 @@ export async function getLiveOverview(seriesFilter?: Series): Promise<LiveOvervi
           websocketPath: env.WS_PATH,
           source: 'openf1',
           mode: live.mode,
+          live: live.mode === 'live',
           sessionKey: live.sessionKey,
         },
       };

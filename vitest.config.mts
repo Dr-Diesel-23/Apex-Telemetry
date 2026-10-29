@@ -17,6 +17,11 @@ export default defineConfig({
       WS_BROADCAST_INTERVAL_MS: '500',
       // The suite must never depend on a third-party API being reachable.
       OPENF1_ENABLED: 'false',
+      JOLPICA_ENABLED: 'false',
+      MOTOGP_API_ENABLED: 'false',
+      // The simulator keeps the WS cadence/frame-shape tests deterministic;
+      // production defaults to live-only (SIMULATED_TELEMETRY=false).
+      SIMULATED_TELEMETRY: 'true',
     },
     testTimeout: 30_000,
     hookTimeout: 60_000,

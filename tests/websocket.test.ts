@@ -93,6 +93,9 @@ describe('WebSocket /ws/telemetry', () => {
     expect(first.series).toBe('F1');
     expect(first.sampleRateHz).toBe(2);
     expect(first.frames).toHaveLength(6);
+    // Simulated frames must never claim to be a live session.
+    expect(first.source).toBe('simulation');
+    expect(first.live).toBe(false);
 
     const frame = first.frames[0];
     expect(frame).toMatchObject({

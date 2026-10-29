@@ -1,9 +1,8 @@
 import type { Request, Response } from 'express';
 import { z } from 'zod';
-import { parseSeriesParam } from '../config/series';
-import { HttpError } from '../utils/httpError';
 import { parseQuery } from '../middleware/validate';
 import { compareDrivers } from '../services/telemetry.service';
+import { seriesFromRequest } from './seriesParam';
 
 const compareQuery = z.object({
   driver1: z.string().min(1, 'driver1 is required'),
@@ -14,11 +13,7 @@ const compareQuery = z.object({
 
 /** GET /api/v1/:series/telemetry/compare?driver1=VER&driver2=NOR */
 export async function compare(req: Request, res: Response): Promise<void> {
-  const raw = Array.isArray(req.params.series) ? req.params.series[0] : req.params.series;
-  const series = parseSeriesParam(raw);
-  if (!series) {
-    throw HttpError.badRequest(`Unknown series '${raw ?? ''}'. Use f1, f2 or motogp.`);
-  }
+  const series = seriesFromRequest(req);
 
   const query = parseQuery(compareQuery, req);
   const result = await compareDrivers(
