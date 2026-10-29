@@ -33,6 +33,9 @@
     weather: null,
     session: null,
     meta: null,
+    tyres: null,
+    schedule: null,
+    live: null,
     connected: false,
     source: 'mock',
     error: null,
@@ -64,9 +67,19 @@
     if (!strip) return;
 
     if (!state.frames.length) {
-      strip.innerHTML = '<p class="kicker">Waiting for the 2 Hz feed...</p>';
+      const html =
+        state.live === false
+          ? '<div class="idle-feed"><b>NO LIVE SESSION</b><small>Live telemetry starts at lights out. The last session stays available in the standings and tyre strategy panels.</small></div>'
+          : '<p class="kicker">Waiting for the 2 Hz feed...</p>';
+      // renderStrip runs from the MutationObserver too — never rewrite the same markup.
+      if (strip.dataset.stamp !== html) {
+        strip.dataset.stamp = html;
+        strip.innerHTML = html;
+      }
       return;
     }
+
+    strip.dataset.stamp = '';
 
     const rows = [...state.frames].sort((a, b) => b.speed - a.speed);
     strip.innerHTML = rows
@@ -76,6 +89,10 @@
           ? frame.teamColor
           : '#ff3e32';
         const name = String(frame.fullName || frame.code || '').toUpperCase();
+        const tyre =
+          frame.tyre && frame.tyre.compound
+            ? `<span class="tyre-pill ${String(frame.tyre.compound).toLowerCase()}" title="${frame.tyre.compoundLabel || ''} · ${frame.tyre.laps || 0} laps">${frame.tyre.compound}</span>`
+            : '';
         return (
           '<div class="live-row">' +
           `<span class="initial">${frame.code}</span>` +
@@ -85,6 +102,7 @@
           '</div>' +
           `<b>${Math.round(frame.speed)}<small>KPH</small></b>` +
           `<span class="gear">G${frame.gear}</span>` +
+          tyre +
           '</div>'
         );
       })
@@ -206,15 +224,176 @@
       circuit.lengthKm ? `${circuit.lengthKm.toFixed(3)} KM TRACK` : 'TRACK LENGTH N/A',
     );
     setText('circuit-country', country || '—');
+
+    applyCircuit(circuit);
+  }
+
+  /**
+   * Paints the real circuit layout (SVG path from `circuits.js`) and puts a
+   * translucent trace of the circuit's tightest corner behind the details card.
+   */
+  function applyCircuit(circuit) {
+    if (!circuit) return;
+
+    const resolve = window.apexCircuitFor;
+    const resolved = typeof resolve === 'function' ? resolve(circuit.shortName, circuit.name, circuit.id) : null;
+
+    const panel = document.getElementById('circuit-panel');
+    if (panel) {
+      const key = resolved ? resolved.key : 'unknown';
+      if (panel.dataset.circuit !== key) {
+        panel.dataset.circuit = key;
+        const path = document.getElementById('circuit-path');
+        if (path) path.setAttribute('d', resolved ? resolved.path : '');
+        const art = panel.querySelector('.corner-art path');
+        if (art) art.setAttribute('d', resolved ? resolved.corner : '');
+        const label = document.getElementById('circuit-layout');
+        if (label) label.textContent = resolved ? resolved.short : 'LAYOUT N/A';
+      }
+    }
+
+    const card = document.querySelector('.event');
+    if (!card || !resolved) return;
+
+    let art = card.querySelector('.corner-art');
+    if (!art) {
+      art = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+      art.setAttribute('class', 'corner-art');
+      art.setAttribute('viewBox', '0 0 100 100');
+      art.setAttribute('aria-hidden', 'true');
+      const stroke = document.createElementNS('http://www.w3.org/2000/svg', 'path');
+      stroke.setAttribute('fill', 'none');
+      stroke.setAttribute('stroke', '#ff3e32');
+      stroke.setAttribute('stroke-width', '6');
+      stroke.setAttribute('stroke-linecap', 'round');
+      stroke.setAttribute('stroke-linejoin', 'round');
+      art.appendChild(stroke);
+      card.insertBefore(art, card.firstChild);
+    }
+
+    const stroke = art.querySelector('path');
+    if (stroke && stroke.getAttribute('d') !== resolved.corner) {
+      stroke.setAttribute('d', resolved.corner);
+    }
+  }
+
+  /** Stint history + pit stops from GET /f1/tyres. */
+  function renderTyres(result) {
+    const rows = document.getElementById('tyre-rows');
+    if (!rows) return;
+
+    if (!result || !Array.isArray(result.drivers) || result.drivers.length === 0) {
+      if (rows.dataset.stamp === 'empty') return;
+      rows.dataset.stamp = 'empty';
+      rows.innerHTML = '<p class="kicker">Tyre data unavailable for this session.</p>';
+      return;
+    }
+
+    // The MutationObserver calls this on every re-render; without a stamp the
+    // innerHTML write below would retrigger the observer forever.
+    const stamp = `${result.updatedAt}:${result.drivers.length}:${result.sessionKey}`;
+    if (rows.dataset.stamp === stamp) return;
+    rows.dataset.stamp = stamp;
+
+    const row = window.apexTyreRow;
+    rows.innerHTML = result.drivers
+      .map((driver) => (typeof row === 'function' ? row(driver) : ''))
+      .join('');
+
+    const circuit = document.getElementById('tyre-circuit');
+    if (circuit) circuit.textContent = String(result.circuit || '—').toUpperCase();
+
+    const meta = document.getElementById('tyre-meta');
+    if (meta) {
+      meta.textContent = `SESSION ${result.sessionKey} — ${result.totalLaps} LAPS — ${
+        result.source === 'openf1' ? 'OPENF1' : 'OFFLINE'
+      }`;
+    }
+  }
+
+  /** Next Grand Prix / MotoGP round from GET /:series/schedule. */
+  function applySchedule(schedule) {
+    const bar = document.getElementById('next-race');
+    if (!bar) return;
+
+    const next = schedule && schedule.next;
+    if (!next) {
+      if (bar.style.display !== 'none') bar.style.display = 'none';
+      return;
+    }
+
+    if (bar.style.display === 'none') bar.style.display = '';
+    const set = (id, text) => {
+      const node = document.getElementById(id);
+      if (node && node.textContent !== text) node.textContent = text;
+    };
+
+    set('next-name', String(next.name || 'NEXT RACE').toUpperCase());
+    const where = [next.circuit, next.locality || next.country].filter(Boolean).join(' — ');
+    set('next-circuit', where.toUpperCase());
+
+    const start = next.startsAt
+      ? new Date(next.startsAt)
+      : next.date
+        ? new Date(`${next.date}T00:00:00Z`)
+        : null;
+    const valid = start && !Number.isNaN(start.getTime());
+
+    set(
+      'next-date',
+      valid
+        ? start
+            .toLocaleDateString('en-GB', {
+              day: '2-digit',
+              month: 'short',
+              year: 'numeric',
+              timeZone: 'UTC',
+            })
+            .toUpperCase()
+        : String(next.date || 'TBC'),
+    );
+
+    let countdown = 'TBC';
+    if (next.status === 'live') {
+      countdown = 'LIVE NOW';
+    } else if (valid) {
+      const diff = start.getTime() - Date.now();
+      if (diff <= 0) {
+        countdown = 'COMPLETED';
+      } else {
+        const days = Math.floor(diff / 86_400_000);
+        const hours = Math.floor((diff % 86_400_000) / 3_600_000);
+        const minutes = Math.floor((diff % 3_600_000) / 60_000);
+        countdown =
+          days > 0
+            ? `IN ${days}D ${String(hours).padStart(2, '0')}H`
+            : `IN ${hours}H ${String(minutes).padStart(2, '0')}M`;
+      }
+    }
+    set('next-countdown', countdown);
+
+    // Every write here re-triggers the MutationObserver, which calls this
+    // function again — so the label must only change when it really differs.
+    const label = bar.querySelector('.kicker');
+    const labelText = next.status === 'live' ? 'RACE WEEKEND — LIVE' : 'NEXT RACE';
+    if (label && label.textContent !== labelText) label.textContent = labelText;
   }
 
   async function loadSeriesExtras(seriesKey) {
     const series = String(seriesKey || 'f1').toLowerCase();
 
-    const [overview, predictions] = await Promise.allSettled([
+    const [overview, predictions, schedule] = await Promise.allSettled([
       api(`/overview/live?series=${series}`),
       api(`/overview/predictions?series=${series}`),
+      api(`/${series}/schedule`),
     ]);
+
+    if (schedule.status === 'fulfilled') {
+      state.schedule = schedule.value;
+      applySchedule(schedule.value);
+    } else {
+      console.warn('[apex] schedule fallback:', schedule.reason?.message || schedule.reason);
+    }
 
     if (overview.status === 'fulfilled') {
       state.weather = overview.value.weather || null;
@@ -241,6 +420,16 @@
     } else {
       console.warn('[apex] predictions fallback:', predictions.reason?.message || predictions.reason);
     }
+
+    if (series === 'f1') {
+      try {
+        const tyres = await api('/f1/tyres');
+        state.tyres = tyres;
+        renderTyres(tyres);
+      } catch (error) {
+        console.warn('[apex] tyre fallback:', error?.message || error);
+      }
+    }
   }
 
   function connect(seriesKey) {
@@ -249,6 +438,7 @@
 
     state.series = series;
     state.frames = [];
+    state.live = null;
     clearTimeout(reconnectTimer);
     renderStrip();
 
@@ -292,15 +482,22 @@
 
       if (message.type === 'connected') {
         state.connected = true;
-        setStatus(`LIVE / ${message.series} / ${message.sampleRateHz} HZ`, 'ok');
+        // Do not claim "LIVE" before the server has told us a session is on.
+        setStatus(`CONNECTED / ${message.series}`, '');
         return;
       }
 
       if (message.type === 'telemetry.snapshot' && Array.isArray(message.frames)) {
-        state.frames = message.frames;
+        // The backend only sends frames while a session is actually running.
+        const live = message.live === true && message.frames.length > 0;
+        state.live = live;
+        state.frames = live ? message.frames : [];
         state.connected = true;
         renderStrip();
-        setStatus(`LIVE / ${message.series} / ${message.sampleRateHz} HZ`, 'ok');
+        setStatus(
+          live ? `LIVE / ${message.series} / ${message.sampleRateHz} HZ` : 'NO LIVE SESSION',
+          live ? 'ok' : '',
+        );
         return;
       }
 
@@ -345,6 +542,8 @@
     }
     applyWeather();
     applySession();
+    renderTyres(state.tyres);
+    applySchedule(state.schedule);
   });
   observer.observe(document.getElementById('content') || document.body, {
     childList: true,
