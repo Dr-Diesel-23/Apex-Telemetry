@@ -272,8 +272,8 @@
 
   /**
    * Paints the real circuit layout (SVG path from `circuits.js`) and sets the
-   * signature-corner photograph (from `corners.js`) behind the session card and
-   * the circuit panel. Circuits without a free photo keep the SVG trace.
+   * signature-corner photograph (from `corners.js`) behind the session card.
+   * The circuit profile panel shows the map only.
    */
   function applyCircuit(circuit) {
     if (!circuit) return;
@@ -317,30 +317,14 @@
       }
     };
 
-    const paintCornerFigure = () => {
-      const figure = document.getElementById('corner-figure');
-      const node = document.getElementById('corner-photo');
-      if (!figure || !node) return;
-      if (photo) {
-        if (node.getAttribute('src') !== photo.url) node.setAttribute('src', photo.url);
-        const alt = `${photo.corner || 'Circuit corner'} — ${resolved.name}`;
-        if (node.alt !== alt) node.alt = alt;
-        if (figure.hidden) figure.hidden = false;
-      } else if (!figure.hidden) {
-        figure.hidden = true;
-      }
-    };
 
     paintEventPhoto();
-    paintCornerFigure();
-
     const setCredit = (id) => {
       const node = document.getElementById(id);
       if (node && node.textContent !== credit) node.textContent = credit;
     };
 
     setCredit('event-credit');
-    setCredit('circuit-credit');
   }
 
   /** Stint history + pit stops from GET /f1/tyres. */

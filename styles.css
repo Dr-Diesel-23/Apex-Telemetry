@@ -75,18 +75,12 @@ button:hover,.active{background:#121212}
 .event-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.34;filter:saturate(.85) contrast(1.05);z-index:0}
 .event::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,#000 0%,rgba(0,0,0,.87) 42%,rgba(0,0,0,.5) 100%);z-index:0}
 .event>div{position:relative;z-index:1}
-.corner-photo{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.16;filter:grayscale(.25);z-index:0;pointer-events:none}
 .circuit-panel.has-photo .corner-art{display:none}
 .photo-credit{display:block;margin-top:10px;color:#5f6a74;font:8px monospace;letter-spacing:.6px;text-transform:uppercase;position:relative;z-index:1}
 .circuit-panel .photo-credit{margin-top:6px}
 
-/* --- circuit panel: photograph on top, layout map below ------------------ */
 .event-photo{opacity:.6;filter:saturate(1.05) brightness(1.12) contrast(1.02)}
 .event::after{background:linear-gradient(90deg,rgba(0,0,0,.93) 0%,rgba(0,0,0,.6) 44%,rgba(0,0,0,.18) 100%)}
-.corner-figure{margin:10px 0 14px;border:1px solid #1c1c1c;overflow:hidden;background:#0a0a0a;position:relative;z-index:1}
-.corner-figure[hidden]{display:none}
-.corner-photo{position:static;inset:auto;display:block;width:100%;height:150px;object-fit:cover;opacity:1;filter:saturate(1.08) brightness(1.12) contrast(1.03);pointer-events:none}
-.corner-figure .photo-credit{margin:0;padding:6px 9px;background:#050505;border-top:1px solid #161616;color:#7b8791}
 
 /* --- brighter session photo + wider driver-id badges -------------------- */
 .event-photo{opacity:.7;filter:saturate(1.06) brightness(1.18) contrast(1.02)}
