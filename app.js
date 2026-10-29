@@ -86,8 +86,10 @@ function constructorTable(){
     head.map((x,i)=>'<th data-ck="'+[0,0,1,2][i]+'">'+x+'</th>').join('')+
     '</tr></thead><tbody>'+rows.map((r,i)=>{
       const delta=i===0||Number(r[2])===0?'LEADER':'+'+r[2];
+      const logo=typeof window.apexTeamLogo==='function'?window.apexTeamLogo(r[0]):null;
+      const crest=logo?'<span class="team-logo-chip"><img class="team-logo" src="'+logo.logo+'" alt="" loading="lazy" data-fallback="'+logo.fallback+'" onerror="this.onerror=null;this.src=this.dataset.fallback"></span>':'';
       return '<tr><td>'+String(i+1).padStart(2,'0')+'</td>'+
-        '<td><b class="constructor-name" style="border-left-color:'+(r[3]||'#ff3e32')+'">'+r[0]+'</b></td>'+
+        '<td><b class="constructor-name" style="border-left-color:'+(r[3]||'#ff3e32')+'">'+crest+'<span>'+r[0]+'</span></b></td>'+
         '<td>'+r[1]+'</td><td class="delta">'+delta+'</td></tr>';
     }).join('')+'</tbody></table></div>';
 }

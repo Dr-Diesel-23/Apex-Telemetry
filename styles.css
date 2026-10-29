@@ -65,7 +65,9 @@ button:hover,.active{background:#121212}
 .tabs.seg button.active{background:#151515;color:#fff;border-color:#ff3e32;border-left:1px solid #ff3e32}
 .driver-id{color:#ff5a4f;font:10px monospace;letter-spacing:.5px;white-space:nowrap;font-style:normal}
 .team-line{display:block;color:#7f8a94;margin-top:2px;font-size:10px}
-.constructor-name{display:inline-block;border-left:3px solid #ff3e32;padding-left:9px;font-size:12px}
+.constructor-name{display:inline-flex;align-items:center;gap:10px;border-left:3px solid #ff3e32;padding-left:9px;font-size:12px}
+.team-logo-chip{display:inline-flex;align-items:center;justify-content:center;background:#fff;border-radius:5px;padding:3px 7px;height:28px;box-sizing:border-box;flex:0 0 auto}
+.team-logo{height:20px;width:auto;max-width:104px;object-fit:contain;display:block}
 .delta{color:#80dda1;font-family:monospace}
 
 /* --- next-race country flag --------------------------------------------- */

@@ -24,6 +24,7 @@ Start the backend first (`../backend`, `npm start`, port 4000).
 | Next-race country flag | `flagcdn.com` (`w40/{iso2}.png`), code from the schedule payload |
 | Circuit layout | `circuits.js` (SVG map) — the profile panel is map-only |
 | Session card photo | `corners.js` (real signature-corner photo, CC attribution) |
+| Constructor logos | `teamLogos.js` — official team marks (Wikimedia), crest fallback |
 | Race control feed | sample data (no public live race-control API) |
 
 F1 and MotoGP are the supported series. The standings tabs, the series filter and
@@ -39,8 +40,29 @@ The panel has two independent switches:
 Drivers are labelled with their official timing identity and number, e.g.
 `Lewis Hamilton (HAM-44)`, and their full 2026 entrant name
 (`Scuderia Ferrari HP`, `Audi Revolut F1 Team`, `McLaren Mastercard F1 Team`, …).
-The constructors table shows rank, team, points and gap to the leader, with each
-team's colour stripe.
+The constructors table shows each team's official logo, rank, team, points and
+gap to the leader, with the team colour stripe.
+
+## Constructor logos
+
+`teamLogos.js` maps every constructor to its official mark — the Ferrari
+prancing horse, the Mercedes star, the McLaren swoosh, the Red Bull bull, the
+Audi rings, the Ducati shield, and so on. Logos are hot-linked from Wikimedia
+(no key, no logo API) and shown on a small white plate so dark marks stay
+legible on the black theme.
+
+Live feeds prefix sponsor names (`Castrol Honda LCR`,
+`Pertamina Enduro VR46 Racing Team`), so the resolver matches the most specific
+keyword first — `LCR` wins over `Honda`, `Pramac` over `Yamaha`. Every entry also
+carries an inline SVG crest used if a logo file ever fails to load, so the table
+never shows a broken image. The file is generated:
+
+```bash
+node tools/build-team-logos.mjs
+```
+
+Trademarks belong to their respective teams; the logos are used for
+identification only.
 
 ## Live telemetry only when the race is live
 
@@ -124,10 +146,12 @@ Frontend/
 ├── live.js             # API/WS adapter: standings, telemetry, tyres, schedule
 ├── circuits.js         # generated circuit layouts + corner traces
 ├── corners.js          # generated signature-corner photos + attribution
+├── teamLogos.js        # generated official constructor logos + crest fallback
 ├── styles.css          # deep-black telemetry theme
 ├── tools/
 │   ├── build-circuits.mjs   # OSM layouts → circuits.js
-│   └── build-corners.mjs    # Commons/Wikipedia photos → corners.js
+│   ├── build-corners.mjs    # Commons/Wikipedia photos → corners.js
+│   └── build-team-logos.mjs # team marks + crests → teamLogos.js
 └── server.js           # static file server (port 5173, /health)
 ```
 
